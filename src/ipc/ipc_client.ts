@@ -82,8 +82,8 @@ import type {
   AgentToolConsentRequestPayload,
   AgentToolConsentResponseParams,
   TelemetryEventPayload,
+  ConsoleEntry,
 } from "./ipc_types";
-import type { ConsoleEntry } from "../atoms/appAtoms";
 import type { Template } from "../shared/templates";
 import type {
   AppChatContext,
@@ -1490,5 +1490,17 @@ export class IpcClient {
     params: AnalyseComponentParams,
   ): Promise<{ isDynamic: boolean; hasStaticText: boolean }> {
     return this.ipcRenderer.invoke("analyze-component", params);
+  }
+
+  // --- Console Logs ---
+  public addLog(entry: ConsoleEntry): void {
+    // Fire and forget - send log to central store
+    this.ipcRenderer.invoke("add-log", entry).catch((err) => {
+      console.error("Failed to add log to central store:", err);
+    });
+  }
+
+  public async clearLogs(appId: number): Promise<void> {
+    await this.ipcRenderer.invoke("clear-logs", { appId });
   }
 }
