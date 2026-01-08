@@ -20,11 +20,14 @@ import { addIntegrationTool } from "./tools/add_integration";
 import { readLogsTool } from "./tools/read_logs";
 import { editFileTool } from "./tools/edit_file";
 import { webSearchTool } from "./tools/web_search";
+import { webCrawlTool } from "./tools/web_crawl";
+import type { LanguageModelV3ToolResultOutput } from "@ai-sdk/provider";
 import {
   escapeXmlAttr,
   escapeXmlContent,
   type ToolDefinition,
   type AgentContext,
+  type ToolResult,
 } from "./tools/types";
 import type { AgentToolConsent } from "@/ipc/ipc_types";
 import { getSupabaseClientCode } from "@/supabase_admin/supabase_context";
@@ -45,6 +48,7 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   addIntegrationTool,
   readLogsTool,
   webSearchTool,
+  webCrawlTool,
 ];
 // ============================================================================
 // Agent Tool Name Type (derived from TOOL_DEFINITIONS)
@@ -228,6 +232,18 @@ async function processArgPlaceholders<T extends Record<string, any>>(
 }
 
 /**
+ * Convert our ToolResult to AI SDK format
+ */
+function convertToolResultForAiSdk(
+  result: ToolResult,
+): LanguageModelV3ToolResultOutput {
+  if (typeof result === "string") {
+    return { type: "text", value: result };
+  }
+  throw new Error(`Unsupported tool result type: ${typeof result}`);
+}
+
+/**
  * Build ToolSet for AI SDK from tool definitions
  */
 export function buildAgentToolSet(ctx: AgentContext) {
@@ -255,7 +271,8 @@ export function buildAgentToolSet(ctx: AgentContext) {
             throw new Error(`User denied permission for ${tool.name}`);
           }
 
-          return await tool.execute(processedArgs, ctx);
+          const result = await tool.execute(processedArgs, ctx);
+          return convertToolResultForAiSdk(result);
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : String(error);

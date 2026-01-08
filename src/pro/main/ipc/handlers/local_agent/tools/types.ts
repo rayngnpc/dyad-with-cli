@@ -47,6 +47,12 @@ export interface AgentContext {
     toolDescription?: string | null;
     inputPreview?: string | null;
   }) => Promise<boolean>;
+  /**
+   * Append a user message to be sent after the tool result.
+   * Use this when the tool needs to provide non-text content (like images)
+   * that models don't support in tool result messages.
+   */
+  appendUserMessage: (content: UserMessageContentPart[]) => void;
 }
 
 // ============================================================================
@@ -74,6 +80,23 @@ export function parsePartialJson<T extends Record<string, unknown>>(
 }
 
 // ============================================================================
+// Tool Result Types
+// ============================================================================
+
+/**
+ * Content part types for user messages (supports images)
+ * These can be appended as follow-up user messages after tool results
+ */
+export type UserMessageContentPart =
+  | { type: "text"; text: string }
+  | { type: "image-url"; url: string };
+
+/**
+ * Tool result can be a simple string or a structured result with content parts
+ */
+export type ToolResult = string;
+
+// ============================================================================
 // Tool Definition Interface
 // ============================================================================
 
@@ -82,7 +105,7 @@ export interface ToolDefinition<T = any> {
   readonly description: string;
   readonly inputSchema: z.ZodType<T>;
   readonly defaultConsent: AgentToolConsent;
-  execute: (args: T, ctx: AgentContext) => Promise<string>;
+  execute: (args: T, ctx: AgentContext) => Promise<ToolResult>;
 
   /**
    * If defined, returns whether the tool should be available in the current context.
