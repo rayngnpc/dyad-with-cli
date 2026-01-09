@@ -47,6 +47,10 @@ import {
   escapeXmlContent,
   UserMessageContentPart,
 } from "./tools/types";
+import {
+  prepareStepMessages,
+  type InjectedMessage,
+} from "./prepare_step_utils";
 import { TOOL_DEFINITIONS } from "./tool_definitions";
 import { parseAiMessagesJson } from "@/ipc/utils/ai_messages_utils";
 import { parseMcpToolKey, sanitizeMcpName } from "@/ipc/utils/mcp_tool_utils";
@@ -143,6 +147,8 @@ export async function handleLocalAgentStream(
 
   // Track pending user messages to inject after tool results
   const pendingUserMessages: UserMessageContentPart[][] = [];
+  // Store injected messages with their insertion index to re-inject at the same spot each step
+  const allInjectedMessages: InjectedMessage[] = [];
 
   try {
     // Get model client
@@ -227,28 +233,11 @@ export async function handleLocalAgentStream(
       stopWhen: stepCountIs(25), // Allow multiple tool call rounds
       abortSignal: abortController.signal,
       // Inject pending user messages (e.g., images from web_crawl) between steps
-      prepareStep: ({ messages, ...rest }) => {
-        if (pendingUserMessages.length === 0) {
-          return undefined;
-        }
-        // Build user messages from pending content
-        const newMessages = [...messages];
-        for (const content of pendingUserMessages) {
-          newMessages.push({
-            role: "user" as const,
-            content: content.map((part) => {
-              if (part.type === "text") {
-                return { type: "text" as const, text: part.text };
-              }
-              // part.type === "image-url"
-              return { type: "image" as const, image: new URL(part.url) };
-            }),
-          });
-        }
-        // Clear pending messages after injection
-        pendingUserMessages.length = 0;
-        return { messages: newMessages, ...rest };
-      },
+      // We must re-inject all accumulated messages each step because the AI SDK
+      // doesn't persist dynamically injected messages in its internal state.
+      // We track the insertion index so messages appear at the same position each step.
+      prepareStep: (options) =>
+        prepareStepMessages(options, pendingUserMessages, allInjectedMessages),
       onFinish: async (response) => {
         const totalTokens = response.usage?.totalTokens;
         const inputTokens = response.usage?.inputTokens;
