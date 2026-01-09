@@ -81,6 +81,7 @@ import type {
   SetAgentToolConsentParams,
   AgentToolConsentRequestPayload,
   AgentToolConsentResponseParams,
+  AgentTodosUpdatePayload,
   TelemetryEventPayload,
   ConsoleEntry,
 } from "./ipc_types";
@@ -138,7 +139,10 @@ export class IpcClient {
   >;
   private mcpConsentHandlers: Map<string, (payload: any) => void>;
   private agentConsentHandlers: Map<string, (payload: any) => void>;
+  private agentTodosHandlers: Set<(payload: AgentTodosUpdatePayload) => void>;
   private telemetryEventHandlers: Set<(payload: TelemetryEventPayload) => void>;
+  // Global handlers called for any chat stream start (used for cleanup)
+  private globalChatStreamStartHandlers: Set<(chatId: number) => void>;
   // Global handlers called for any chat stream completion (used for cleanup)
   private globalChatStreamEndHandlers: Set<(chatId: number) => void>;
   private constructor() {
@@ -148,7 +152,9 @@ export class IpcClient {
     this.helpStreams = new Map();
     this.mcpConsentHandlers = new Map();
     this.agentConsentHandlers = new Map();
+    this.agentTodosHandlers = new Set();
     this.telemetryEventHandlers = new Set();
+    this.globalChatStreamStartHandlers = new Set();
     this.globalChatStreamEndHandlers = new Set();
     // Set up listeners for stream events
     this.ipcRenderer.on("chat:response:chunk", (data) => {
@@ -295,6 +301,13 @@ export class IpcClient {
     this.ipcRenderer.on("agent-tool:consent-request", (payload) => {
       const handler = this.agentConsentHandlers.get("consent");
       if (handler) handler(payload);
+    });
+
+    // Agent todos update from main
+    this.ipcRenderer.on("agent-tool:todos-update", (payload) => {
+      for (const handler of this.agentTodosHandlers) {
+        handler(payload as unknown as AgentTodosUpdatePayload);
+      }
     });
 
     // Telemetry events from main to renderer
@@ -450,6 +463,11 @@ export class IpcClient {
       onError,
     } = options;
     this.chatStreams.set(chatId, { onUpdate, onEnd, onError });
+
+    // Notify global stream start handlers
+    for (const handler of this.globalChatStreamStartHandlers) {
+      handler(chatId);
+    }
 
     // Handle file attachments if provided
     if (attachments && attachments.length > 0) {
@@ -973,6 +991,31 @@ export class IpcClient {
 
   public respondToAgentConsentRequest(params: AgentToolConsentResponseParams) {
     this.ipcRenderer.invoke("agent-tool:consent-response", params);
+  }
+
+  /**
+   * Subscribe to agent todos updates from the local agent.
+   * Called when the agent updates its todo list during a streaming session.
+   */
+  public onAgentTodosUpdate(
+    handler: (payload: AgentTodosUpdatePayload) => void,
+  ) {
+    this.agentTodosHandlers.add(handler);
+    return () => {
+      this.agentTodosHandlers.delete(handler);
+    };
+  }
+
+  /**
+   * Subscribe to be notified when any chat stream starts.
+   * Useful for cleanup tasks like clearing pending consent requests.
+   * @returns Unsubscribe function
+   */
+  public onChatStreamStart(handler: (chatId: number) => void): () => void {
+    this.globalChatStreamStartHandlers.add(handler);
+    return () => {
+      this.globalChatStreamStartHandlers.delete(handler);
+    };
   }
 
   /**
