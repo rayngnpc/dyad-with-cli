@@ -33,7 +33,7 @@ import {
   type AgentContext,
   type ToolResult,
 } from "./tools/types";
-import type { AgentToolConsent } from "@/ipc/ipc_types";
+import { AgentToolConsent } from "@/lib/schemas";
 import { getSupabaseClientCode } from "@/supabase_admin/supabase_context";
 // Combined tool definitions array
 export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
@@ -170,6 +170,8 @@ export async function requireAgentToolConsent(
   const current = getAgentToolConsent(params.toolName);
 
   if (current === "always") return true;
+  if (current === "never")
+    throw new Error("Should not ask for consent for a tool marked as 'never'");
 
   // Ask renderer for a decision via event bridge
   const requestId = `agent:${params.toolName}:${crypto.randomUUID()}`;
@@ -258,6 +260,11 @@ export function buildAgentToolSet(ctx: AgentContext) {
   const toolSet: Record<string, any> = {};
 
   for (const tool of TOOL_DEFINITIONS) {
+    const consent = getAgentToolConsent(tool.name);
+    if (consent === "never") {
+      continue;
+    }
+
     if (tool.isEnabled && !tool.isEnabled(ctx)) {
       continue;
     }
