@@ -160,6 +160,14 @@ export default function HomePage() {
         });
       }
 
+      // Apply selected theme to the new app (if one is set)
+      if (settings?.selectedThemeId) {
+        await IpcClient.getInstance().setAppTheme({
+          appId: result.app.id,
+          themeId: settings.selectedThemeId || null,
+        });
+      }
+
       // Stream the message with attachments
       streamMessage({
         prompt: inputValue,

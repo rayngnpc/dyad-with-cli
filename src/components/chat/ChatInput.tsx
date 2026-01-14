@@ -486,6 +486,7 @@ export function ChatInput({ chatId }: { chatId?: number }) {
               onFileSelect={handleFileSelect}
               showTokenBar={showTokenBar}
               toggleShowTokenBar={toggleShowTokenBar}
+              appId={appId ?? undefined}
             />
           </div>
           {/* TokenBar is only displayed when showTokenBar is true */}

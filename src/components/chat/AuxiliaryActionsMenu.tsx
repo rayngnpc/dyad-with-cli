@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { Plus, Paperclip, ChartColumnIncreasing } from "lucide-react";
+import {
+  Plus,
+  Paperclip,
+  ChartColumnIncreasing,
+  Palette,
+  Check,
+  Ban,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,9 +17,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { ContextFilesPicker } from "@/components/ContextFilesPicker";
 import { FileAttachmentDropdown } from "./FileAttachmentDropdown";
+import { useThemes } from "@/hooks/useThemes";
+import { useAppTheme, APP_THEME_QUERY_KEY } from "@/hooks/useAppTheme";
+import { useSettings } from "@/hooks/useSettings";
+import { IpcClient } from "@/ipc/ipc_client";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface AuxiliaryActionsMenuProps {
   onFileSelect: (
@@ -22,6 +39,7 @@ interface AuxiliaryActionsMenuProps {
   showTokenBar?: boolean;
   toggleShowTokenBar?: () => void;
   hideContextFilesPicker?: boolean;
+  appId?: number;
 }
 
 export function AuxiliaryActionsMenu({
@@ -29,8 +47,34 @@ export function AuxiliaryActionsMenu({
   showTokenBar,
   toggleShowTokenBar,
   hideContextFilesPicker,
+  appId,
 }: AuxiliaryActionsMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const { themes } = useThemes();
+  const { themeId: appThemeId } = useAppTheme(appId);
+  const { settings, updateSettings } = useSettings();
+  const queryClient = useQueryClient();
+
+  // Determine current theme: use app theme if appId exists, otherwise use settings
+  // Note: settings stores empty string for "no theme", convert to null
+  const currentThemeId =
+    appId != null ? appThemeId : settings?.selectedThemeId || null;
+
+  const handleThemeSelect = async (themeId: string | null) => {
+    if (appId) {
+      // Update app-specific theme
+      await IpcClient.getInstance().setAppTheme({
+        appId,
+        themeId,
+      });
+      // Invalidate app theme query to refresh
+      queryClient.invalidateQueries({ queryKey: APP_THEME_QUERY_KEY(appId) });
+    } else {
+      // Update default theme in settings (for new apps)
+      // Store as string for settings (empty string for no theme)
+      await updateSettings({ selectedThemeId: themeId ?? "" });
+    }
+  };
 
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
@@ -65,7 +109,62 @@ export function AuxiliaryActionsMenu({
           </DropdownMenuSubContent>
         </DropdownMenuSub>
 
-        {/* Toggle Token Usage */}
+        {/* Themes Submenu */}
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger className="py-2 px-3">
+            <Palette size={16} className="mr-2" />
+            Themes
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            {/* No Theme option (special frontend-only option) */}
+            <DropdownMenuItem
+              onClick={() => handleThemeSelect(null)}
+              className={`py-2 px-3 ${currentThemeId === null ? "bg-primary/10" : ""}`}
+              data-testid="theme-option-none"
+            >
+              <div className="flex items-center w-full">
+                <Ban size={16} className="mr-2 text-muted-foreground" />
+                <span className="flex-1">No Theme</span>
+                {currentThemeId === null && (
+                  <Check size={16} className="text-primary ml-2" />
+                )}
+              </div>
+            </DropdownMenuItem>
+
+            {/* Actual themes from themesData */}
+            {themes?.map((theme) => {
+              const isSelected = currentThemeId === theme.id;
+              return (
+                <Tooltip key={theme.id}>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuItem
+                      onClick={() => handleThemeSelect(theme.id)}
+                      className={`py-2 px-3 ${isSelected ? "bg-primary/10" : ""}`}
+                      data-testid={`theme-option-${theme.id}`}
+                    >
+                      <div className="flex items-center w-full">
+                        {theme.icon === "palette" && (
+                          <Palette
+                            size={16}
+                            className="mr-2 text-muted-foreground"
+                          />
+                        )}
+                        <span className="flex-1">{theme.name}</span>
+                        {isSelected && (
+                          <Check size={16} className="text-primary ml-2" />
+                        )}
+                      </div>
+                    </DropdownMenuItem>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    {theme.description}
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+
         {toggleShowTokenBar && (
           <>
             <DropdownMenuSeparator />
