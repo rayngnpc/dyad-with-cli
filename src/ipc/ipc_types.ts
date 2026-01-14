@@ -562,6 +562,12 @@ export interface GithubRepository {
   private: boolean;
 }
 
+export interface GithubSyncOptions {
+  force?: boolean;
+  rebase?: boolean;
+  forceWithLease?: boolean;
+}
+
 export type CloneRepoReturnType =
   | {
       app: App;
