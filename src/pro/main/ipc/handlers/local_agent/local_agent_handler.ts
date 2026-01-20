@@ -8,6 +8,7 @@ import {
   streamText,
   ToolSet,
   stepCountIs,
+  hasToolCall,
   ModelMessage,
   type ToolExecutionOptions,
 } from "ai";
@@ -55,6 +56,7 @@ import {
 import { TOOL_DEFINITIONS } from "./tool_definitions";
 import { parseAiMessagesJson } from "@/ipc/utils/ai_messages_utils";
 import { parseMcpToolKey, sanitizeMcpName } from "@/ipc/utils/mcp_tool_utils";
+import { addIntegrationTool } from "./tools/add_integration";
 
 const logger = log.scope("local_agent_handler");
 
@@ -244,7 +246,7 @@ export async function handleLocalAgentStream(
       system: systemPrompt,
       messages: messageHistory,
       tools: allTools,
-      stopWhen: stepCountIs(25), // Allow multiple tool call rounds
+      stopWhen: [stepCountIs(25), hasToolCall(addIntegrationTool.name)], // Allow multiple tool call rounds, stop on add_integration
       abortSignal: abortController.signal,
       // Inject pending user messages (e.g., images from web_crawl) between steps
       // We must re-inject all accumulated messages each step because the AI SDK
