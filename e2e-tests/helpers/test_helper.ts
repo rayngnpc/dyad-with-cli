@@ -21,6 +21,26 @@ export const Timeout = {
 };
 
 /**
+ * Normalizes item_reference IDs in the input array to be deterministic.
+ * item_reference objects have the shape { type: "item_reference", id: "msg_..." }
+ * where the ID is a timestamp-based value that changes between test runs.
+ */
+function normalizeItemReferences(dump: any): void {
+  const input = dump?.body?.input;
+  if (!Array.isArray(input)) {
+    return;
+  }
+
+  let refIndex = 0;
+  for (const item of input) {
+    if (item?.type === "item_reference" && item?.id) {
+      item.id = `[[ITEM_REF_${refIndex}]]`;
+      refIndex++;
+    }
+  }
+}
+
+/**
  * Normalizes fileId hashes in versioned_files to be deterministic.
  * FileIds are SHA-256 hashes that may include non-deterministic components
  * like app paths with timestamps. This replaces them with stable placeholders
@@ -328,6 +348,9 @@ export class PageObject {
     }
     await this.setUpDyadProvider();
     await this.goToAppsTab();
+    if (!localAgent) {
+      await this.selectChatMode("build");
+    }
     // Select a non-openAI model for local agent mode,
     // since openAI models go to the responses API.
     if (localAgent && !localAgentUseAutoModel) {
@@ -411,13 +434,13 @@ export class PageObject {
 
   async selectChatMode(mode: "build" | "ask" | "agent" | "local-agent") {
     await this.page.getByTestId("chat-mode-selector").click();
-    // local-agent appears as "Agent v2" in the UI
-    const optionName =
-      mode === "local-agent"
-        ? "Agent v2"
-        : mode === "agent"
-          ? "Build with MCP"
-          : mode;
+    const mapping = {
+      build: "Build Generate and edit code",
+      ask: "Ask",
+      agent: "Build with MCP",
+      "local-agent": "Agent v2",
+    };
+    const optionName = mapping[mode];
     await this.page
       .getByRole("option", {
         name: optionName,
@@ -831,6 +854,8 @@ export class PageObject {
       }
       // Normalize fileIds to be deterministic based on content
       normalizeVersionedFiles(parsedDump);
+      // Normalize item_reference IDs (e.g., msg_1234567890) to be deterministic
+      normalizeItemReferences(parsedDump);
       expect(
         JSON.stringify(parsedDump, null, 2).replace(/\\r\\n/g, "\\n"),
       ).toMatchSnapshot(name);

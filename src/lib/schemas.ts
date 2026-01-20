@@ -291,6 +291,7 @@ export const UserSettingsSchema = z
     selectedThemeId: z.string().optional(),
     enableSupabaseWriteSqlMigration: z.boolean().optional(),
     selectedChatMode: ChatModeSchema.optional(),
+    defaultChatMode: ChatModeSchema.optional(),
     acceptedCommunityCode: z.boolean().optional(),
     zoomLevel: ZoomLevelSchema.optional(),
 
@@ -328,6 +329,27 @@ export function isDyadProEnabled(settings: UserSettings): boolean {
 
 export function hasDyadProKey(settings: UserSettings): boolean {
   return !!settings.providerSettings?.auto?.apiKey?.value;
+}
+
+/**
+ * Gets the effective default chat mode based on settings and pro status.
+ * - If defaultChatMode is set and valid for the user's Pro status, use it
+ * - If defaultChatMode is "local-agent" but user doesn't have Pro, fall back to "build"
+ * - If defaultChatMode is NOT set but user has Dyad Pro enabled, treat as "local-agent"
+ * - If not pro, treat as "build"
+ */
+export function getEffectiveDefaultChatMode(settings: UserSettings): ChatMode {
+  if (settings.defaultChatMode) {
+    // "local-agent" requires Pro - fall back to "build" if user lost Pro access
+    if (
+      settings.defaultChatMode === "local-agent" &&
+      !isDyadProEnabled(settings)
+    ) {
+      return "build";
+    }
+    return settings.defaultChatMode;
+  }
+  return isDyadProEnabled(settings) ? "local-agent" : "build";
 }
 
 export function isSupabaseConnected(settings: UserSettings | null): boolean {
