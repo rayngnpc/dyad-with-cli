@@ -82,7 +82,11 @@ import { inArray } from "drizzle-orm";
 import { replacePromptReference } from "../utils/replacePromptReference";
 import { mcpManager } from "../utils/mcp_manager";
 import z from "zod";
-import { isSupabaseConnected, isTurboEditsV2Enabled } from "@/lib/schemas";
+import {
+  isDyadProEnabled,
+  isSupabaseConnected,
+  isTurboEditsV2Enabled,
+} from "@/lib/schemas";
 import { AI_STREAMING_ERROR_MESSAGE_PREFIX } from "@/shared/texts";
 import { getCurrentCommitHash } from "../utils/git_utils";
 import {
@@ -806,7 +810,14 @@ This conversation includes one or more image attachments. When the user uploads 
                 attachmentPaths,
               );
             }
-            if (settings.selectedChatMode === "local-agent") {
+            // Save aiMessagesJson for modes that use handleLocalAgentStream
+            // (which reads from DB and needs structured image content)
+            const willUseLocalAgentStream =
+              settings.selectedChatMode === "local-agent" ||
+              (settings.selectedChatMode === "ask" &&
+                isDyadProEnabled(settings) &&
+                !mentionedAppsCodebases.length);
+            if (willUseLocalAgentStream) {
               // Insert into DB (with size guard)
               const userAiMessagesJson = getAiMessagesJsonIfWithinLimit([
                 chatMessages[lastUserIndex],
@@ -995,6 +1006,31 @@ This conversation includes one or more image attachments. When the user uploads 
           });
           return fullResponse;
         };
+
+        // Handle pro ask mode: use local-agent in read-only mode
+        // This gives pro users access to code reading tools while in ask mode
+        if (
+          settings.selectedChatMode === "ask" &&
+          isDyadProEnabled(settings) &&
+          !mentionedAppsCodebases.length
+        ) {
+          // Reconstruct system prompt for local-agent read-only mode
+          const readOnlySystemPrompt = constructSystemPrompt({
+            aiRules,
+            chatMode: "local-agent",
+            enableTurboEditsV2: false,
+            themePrompt,
+            readOnly: true,
+          });
+
+          await handleLocalAgentStream(event, req, abortController, {
+            placeholderMessageId: placeholderAssistantMessage.id,
+            systemPrompt: readOnlySystemPrompt,
+            dyadRequestId: dyadRequestId ?? "[no-request-id]",
+            readOnly: true,
+          });
+          return;
+        }
 
         // Handle local-agent mode (Agent v2)
         // Mentioned apps can't be handled by the local agent (defer to balanced smart context
