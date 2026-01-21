@@ -67,6 +67,7 @@ import { cleanFullResponse } from "../utils/cleanFullResponse";
 import { generateProblemReport } from "../processors/tsc";
 import { createProblemFixPrompt } from "@/shared/problem_prompt";
 import { AsyncVirtualFileSystem } from "../../../shared/VirtualFilesystem";
+import { escapeXmlAttr, escapeXmlContent } from "../../../shared/xmlEscape";
 import {
   getDyadAddDependencyTags,
   getDyadWriteTags,
@@ -125,13 +126,7 @@ async function isTextFile(filePath: string): Promise<boolean> {
   return TEXT_FILE_EXTENSIONS.includes(ext);
 }
 
-function escapeXml(unsafe: string): string {
-  return unsafe
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+// Use escapeXmlAttr from shared/xmlEscape for XML escaping
 
 // Safely parse an MCP tool key that combines server and tool names.
 // We split on the LAST occurrence of "__" to avoid ambiguity if either
@@ -1276,7 +1271,7 @@ ${formattedSearchReplaceIssues}`,
 ${problemReport.problems
   .map(
     (problem) =>
-      `<problem file="${escapeXml(problem.file)}" line="${problem.line}" column="${problem.column}" code="${problem.code}">${escapeXml(problem.message)}</problem>`,
+      `<problem file="${escapeXmlAttr(problem.file)}" line="${problem.line}" column="${problem.column}" code="${problem.code}">${escapeXmlContent(problem.message)}</problem>`,
   )
   .join("\n")}
 </dyad-problem-report>`;
