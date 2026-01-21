@@ -33,6 +33,12 @@ import type {
   ImportAppResult,
   ImportAppParams,
   RenameBranchParams,
+  GitBranchAppIdParams,
+  CreateGitBranchParams,
+  GitBranchParams,
+  RenameGitBranchParams,
+  ListRemoteGitBranchesParams,
+  CommitChangesParams,
   UserBudgetInfo,
   CopyAppParams,
   App,
@@ -89,6 +95,7 @@ import type {
   ConsoleEntry,
   SetAppThemeParams,
   GetAppThemeParams,
+  UncommittedFile,
 } from "./ipc_types";
 import type { Template } from "../shared/templates";
 import type { Theme } from "../shared/themes";
@@ -896,7 +903,7 @@ export class IpcClient {
   public async abortGithubMerge(appId: number): Promise<void> {
     await this.ipcRenderer.invoke("github:merge-abort", {
       appId,
-    });
+    } satisfies GitBranchAppIdParams);
   }
 
   public async continueGithubRebase(appId: number): Promise<void> {
@@ -916,7 +923,9 @@ export class IpcClient {
   }
 
   public async fetchGithubRepo(appId: number): Promise<void> {
-    await this.ipcRenderer.invoke("github:fetch", { appId });
+    await this.ipcRenderer.invoke("github:fetch", {
+      appId,
+    } satisfies GitBranchAppIdParams);
   }
 
   public async createGithubBranch(
@@ -928,21 +937,27 @@ export class IpcClient {
       appId,
       branch,
       from,
-    });
+    } satisfies CreateGitBranchParams);
   }
 
   public async deleteGithubBranch(
     appId: number,
     branch: string,
   ): Promise<void> {
-    await this.ipcRenderer.invoke("github:delete-branch", { appId, branch });
+    await this.ipcRenderer.invoke("github:delete-branch", {
+      appId,
+      branch,
+    } satisfies GitBranchParams);
   }
 
   public async switchGithubBranch(
     appId: number,
     branch: string,
   ): Promise<void> {
-    await this.ipcRenderer.invoke("github:switch-branch", { appId, branch });
+    await this.ipcRenderer.invoke("github:switch-branch", {
+      appId,
+      branch,
+    } satisfies GitBranchParams);
   }
 
   public async renameGithubBranch(
@@ -954,11 +969,14 @@ export class IpcClient {
       appId,
       oldBranch,
       newBranch,
-    });
+    } satisfies RenameGitBranchParams);
   }
 
   public async mergeGithubBranch(appId: number, branch: string): Promise<void> {
-    await this.ipcRenderer.invoke("github:merge-branch", { appId, branch });
+    await this.ipcRenderer.invoke("github:merge-branch", {
+      appId,
+      branch,
+    } satisfies GitBranchParams);
   }
 
   public async getGithubMergeConflicts(appId: number): Promise<string[]> {
@@ -968,7 +986,9 @@ export class IpcClient {
   public async listLocalGithubBranches(
     appId: number,
   ): Promise<{ branches: string[]; current: string | null }> {
-    return this.ipcRenderer.invoke("github:list-local-branches", { appId });
+    return this.ipcRenderer.invoke("github:list-local-branches", {
+      appId,
+    } satisfies GitBranchAppIdParams);
   }
 
   public async listRemoteGithubBranches(
@@ -978,7 +998,7 @@ export class IpcClient {
     return this.ipcRenderer.invoke("github:list-remote-branches", {
       appId,
       remote,
-    });
+    } satisfies ListRemoteGitBranchesParams);
   }
 
   public async getGithubState(appId: number): Promise<{
@@ -986,6 +1006,16 @@ export class IpcClient {
     rebaseInProgress: boolean;
   }> {
     return this.ipcRenderer.invoke("github:get-git-state", { appId });
+  }
+
+  public async getUncommittedFiles(appId: number): Promise<UncommittedFile[]> {
+    return this.ipcRenderer.invoke("git:get-uncommitted-files", {
+      appId,
+    } satisfies GitBranchAppIdParams);
+  }
+
+  public async commitChanges(params: CommitChangesParams): Promise<string> {
+    return this.ipcRenderer.invoke("git:commit-changes", params);
   }
 
   public async listCollaborators(
