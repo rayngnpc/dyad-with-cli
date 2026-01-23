@@ -111,7 +111,11 @@
       "Bash(sort:*)",
       "Bash(uniq:*)",
       "Bash(cut:*)",
-      "Bash(diff:*)"
+      "Bash(diff:*)",
+
+      "Bash(chmod:*)",
+
+      "Bash(python3:*)"
     ]
   },
   "hooks": {
@@ -122,6 +126,11 @@
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/gh-permission-hook.py",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/python-permission-hook.py",
             "timeout": 5000
           }
         ]
