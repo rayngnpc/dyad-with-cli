@@ -8,7 +8,7 @@ import pathModule from "node:path";
 import { readSettings } from "../../main/settings";
 import log from "electron-log";
 import { normalizePath } from "../../../shared/normalizePath";
-import type { UncommittedFile, UncommittedFileStatus } from "../ipc_types";
+import type { UncommittedFile, UncommittedFileStatus } from "@/ipc/types";
 const logger = log.scope("git_utils");
 import type {
   GitBaseParams,
@@ -417,9 +417,6 @@ export async function getGitUncommittedFiles({
       .map((row) => row[0]);
   }
 }
-
-// Re-export from ipc_types for backwards compatibility
-export type { UncommittedFile, UncommittedFileStatus } from "../ipc_types";
 
 /**
  * Get uncommitted files with their status (added, modified, deleted, renamed).
