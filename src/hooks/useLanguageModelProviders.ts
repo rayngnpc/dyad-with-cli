@@ -41,7 +41,7 @@ export function useLanguageModelProviders() {
       const azureSettings = providerSettings as AzureProviderSetting;
       const hasSavedSettings = Boolean(
         (azureSettings?.apiKey?.value ?? "").trim() &&
-          (azureSettings?.resourceName ?? "").trim(),
+        (azureSettings?.resourceName ?? "").trim(),
       );
       if (hasSavedSettings) {
         return true;

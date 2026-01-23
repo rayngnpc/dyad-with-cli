@@ -985,25 +985,19 @@ function ProposalSummary({
 
   if (sqlQueries.length) {
     parts.push(
-      `${sqlQueries.length} SQL ${
-        sqlQueries.length === 1 ? "query" : "queries"
-      }`,
+      `${sqlQueries.length} SQL ${sqlQueries.length === 1 ? "query" : "queries"}`,
     );
   }
 
   if (serverFunctions.length) {
     parts.push(
-      `${serverFunctions.length} Server ${
-        serverFunctions.length === 1 ? "Function" : "Functions"
-      }`,
+      `${serverFunctions.length} Server ${serverFunctions.length === 1 ? "Function" : "Functions"}`,
     );
   }
 
   if (packagesAdded.length) {
     parts.push(
-      `${packagesAdded.length} ${
-        packagesAdded.length === 1 ? "package" : "packages"
-      }`,
+      `${packagesAdded.length} ${packagesAdded.length === 1 ? "package" : "packages"}`,
     );
   }
 
