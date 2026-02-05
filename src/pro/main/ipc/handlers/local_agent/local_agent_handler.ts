@@ -59,6 +59,9 @@ import { TOOL_DEFINITIONS } from "./tool_definitions";
 import { parseAiMessagesJson } from "@/ipc/utils/ai_messages_utils";
 import { parseMcpToolKey, sanitizeMcpName } from "@/ipc/utils/mcp_tool_utils";
 import { addIntegrationTool } from "./tools/add_integration";
+import { planningQuestionnaireTool } from "./tools/planning_questionnaire";
+import { writePlanTool } from "./tools/write_plan";
+import { exitPlanTool } from "./tools/exit_plan";
 
 const logger = log.scope("local_agent_handler");
 
@@ -110,6 +113,7 @@ export async function handleLocalAgentStream(
     systemPrompt,
     dyadRequestId,
     readOnly = false,
+    planModeOnly = false,
     messageOverride,
   }: {
     placeholderMessageId: number;
@@ -120,6 +124,11 @@ export async function handleLocalAgentStream(
      * State-modifying tools are disabled, and no commits/deploys are made.
      */
     readOnly?: boolean;
+    /**
+     * If true, only include tools allowed in plan mode.
+     * This includes read-only exploration tools and planning-specific tools.
+     */
+    planModeOnly?: boolean;
     /**
      * If provided, use these messages instead of fetching from the database.
      * Used for summarization where messages need to be transformed.
@@ -237,8 +246,10 @@ export async function handleLocalAgentStream(
     // Build tool set (agent tools + MCP tools)
     // In read-only mode, only include read-only tools and skip MCP tools
     // (since we can't determine if MCP tools modify state)
-    const agentTools = buildAgentToolSet(ctx, { readOnly });
-    const mcpTools = readOnly ? {} : await getMcpTools(event, ctx);
+    // In plan mode, only include planning tools (read + questionnaire/plan tools)
+    const agentTools = buildAgentToolSet(ctx, { readOnly, planModeOnly });
+    const mcpTools =
+      readOnly || planModeOnly ? {} : await getMcpTools(event, ctx);
     const allTools: ToolSet = { ...agentTools, ...mcpTools };
 
     // Prepare message history with graceful fallback
@@ -270,7 +281,22 @@ export async function handleLocalAgentStream(
       system: systemPrompt,
       messages: messageHistory,
       tools: allTools,
-      stopWhen: [stepCountIs(25), hasToolCall(addIntegrationTool.name)], // Allow multiple tool call rounds, stop on add_integration
+      stopWhen: [
+        stepCountIs(25),
+        hasToolCall(addIntegrationTool.name),
+        // In plan mode, stop immediately after presenting a questionnaire,
+        // writing a plan, or exiting plan mode so the agent yields control
+        // back to the user. Without this, some models (e.g. Gemini Pro 3)
+        // ignore the prompt-level "STOP" instruction and keep calling tools
+        // in a loop.
+        ...(planModeOnly
+          ? [
+              hasToolCall(planningQuestionnaireTool.name),
+              hasToolCall(writePlanTool.name),
+              hasToolCall(exitPlanTool.name),
+            ]
+          : []),
+      ],
       abortSignal: abortController.signal,
       // Inject pending user messages (e.g., images from web_crawl) between steps
       // We must re-inject all accumulated messages each step because the AI SDK
@@ -437,8 +463,8 @@ export async function handleLocalAgentStream(
       logger.warn("Failed to save AI messages JSON:", err);
     }
 
-    // In read-only mode, skip deploys and commits
-    if (!readOnly) {
+    // In read-only and plan mode, skip deploys and commits
+    if (!readOnly && !planModeOnly) {
       // Deploy all Supabase functions if shared modules changed
       await deployAllFunctionsIfNeeded(ctx);
 

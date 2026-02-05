@@ -18,7 +18,7 @@ import {
   Lock,
 } from "lucide-react";
 import type React from "react";
-import { useCallback, useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 
 import { useSettings } from "@/hooks/useSettings";
 import { ipc } from "@/ipc/types";
@@ -28,6 +28,7 @@ import {
   selectedChatIdAtom,
   pendingAgentConsentsAtom,
   agentTodosByChatIdAtom,
+  needsFreshPlanChatAtom,
 } from "@/atoms/chatAtoms";
 import { atom, useAtom, useSetAtom, useAtomValue } from "jotai";
 import { useStreamChat } from "@/hooks/useStreamChat";
@@ -53,12 +54,13 @@ import { useVersions } from "@/hooks/useVersions";
 import { useAttachments } from "@/hooks/useAttachments";
 import { AttachmentsList } from "./AttachmentsList";
 import { DragDropOverlay } from "./DragDropOverlay";
-import { showExtraFilesToast } from "@/lib/toast";
+import { showExtraFilesToast, showInfo } from "@/lib/toast";
 import { useSummarizeInNewChat } from "./SummarizeInNewChatButton";
 import { ChatInputControls } from "../ChatInputControls";
 import { ChatErrorBox } from "./ChatErrorBox";
 import { AgentConsentBanner } from "./AgentConsentBanner";
 import { TodoList } from "./TodoList";
+import { QuestionnaireInput } from "./QuestionnaireInput";
 import {
   selectedComponentsPreviewAtom,
   previewIframeRefAtom,
@@ -182,6 +184,24 @@ export function ChatInput({ chatId }: { chatId?: number }) {
   }, [chatId, messagesById]);
 
   const { userBudget } = useUserBudgetInfo();
+  const [needsFreshPlanChat, setNeedsFreshPlanChat] = useAtom(
+    needsFreshPlanChatAtom,
+  );
+
+  // Detect transition to plan mode from another mode in a chat with messages
+  const prevModeRef = useRef(settings?.selectedChatMode);
+  useEffect(() => {
+    const prevMode = prevModeRef.current;
+    const currentMode = settings?.selectedChatMode;
+    prevModeRef.current = currentMode;
+
+    if (prevMode && prevMode !== "plan" && currentMode === "plan") {
+      const messages = chatId ? (messagesById.get(chatId) ?? []) : [];
+      if (messages.length > 0) {
+        setNeedsFreshPlanChat(true);
+      }
+    }
+  }, [settings?.selectedChatMode, chatId, messagesById, setNeedsFreshPlanChat]);
 
   // Token counting for context limit banner
   const { result: tokenCountResult } = useCountTokens(
@@ -221,6 +241,30 @@ export function ChatInput({ chatId }: { chatId?: number }) {
       isStreaming ||
       !chatId
     ) {
+      return;
+    }
+
+    // If switching to plan mode from another mode in a chat with messages,
+    // create a new chat for a clean context.
+    if (needsFreshPlanChat && settings?.selectedChatMode === "plan" && appId) {
+      const currentInput = inputValue;
+      setInputValue("");
+      setNeedsFreshPlanChat(false);
+
+      const newChatId = await ipc.chat.createChat(appId);
+      setSelectedChatId(newChatId);
+      navigate({ to: "/chat", search: { id: newChatId } });
+      queryClient.invalidateQueries({ queryKey: queryKeys.chats.all });
+      showInfo("We've switched you to a new chat for a clean context");
+
+      await streamMessage({
+        prompt: currentInput,
+        chatId: newChatId,
+        attachments,
+        redo: false,
+      });
+      clearAttachments();
+      posthog.capture("chat:submit", { chatMode: settings?.selectedChatMode });
       return;
     }
 
@@ -389,6 +433,9 @@ export function ChatInput({ chatId }: { chatId?: number }) {
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
+          {/* Show active questionnaire if exists */}
+          <QuestionnaireInput />
+
           {/* Show todo list if there are todos for this chat */}
           {chatTodos.length > 0 && <TodoList todos={chatTodos} />}
           {/* Show agent consent banner if there's a pending consent request */}

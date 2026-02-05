@@ -1,0 +1,35 @@
+- paragraph: tc=local-agent/questionnaire
+- paragraph: Let me ask you a few questions to understand your requirements.
+- button:
+  - img
+- img
+- text: Approved
+- img
+- text: claude-opus-4-5
+- img
+- text: less than a minute ago
+- button "Request ID":
+  - img
+- paragraph: "Here are my responses to the questionnaire:"
+- paragraph:
+  - strong: Which framework do you prefer?
+  - text: React
+- img
+- text: file1.txt
+- button "Edit":
+  - img
+- img
+- text: file1.txt
+- paragraph: More EOM
+- button:
+  - img
+- img
+- text: claude-opus-4-5
+- img
+- text: less than a minute ago
+- button "Request ID":
+  - img
+- button "Undo":
+  - img
+- button "Retry":
+  - img
