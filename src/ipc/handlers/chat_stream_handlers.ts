@@ -86,7 +86,6 @@ import { replacePromptReference } from "../utils/replacePromptReference";
 import { mcpManager } from "../utils/mcp_manager";
 import z from "zod";
 import {
-  isDyadProEnabled,
   isBasicAgentMode,
   isSupabaseConnected,
   isTurboEditsV2Enabled,
@@ -536,8 +535,7 @@ ${componentSnippet}
         );
         const willUseLocalAgentStream =
           (settings.selectedChatMode === "local-agent" ||
-            (settings.selectedChatMode === "ask" &&
-              isDyadProEnabled(settings))) &&
+            settings.selectedChatMode === "ask") &&
           !mentionedAppsCodebases.length;
 
         const isDeepContextEnabled =
@@ -729,8 +727,9 @@ ${componentSnippet}
         // print out the dyad-write tags.
         // Usually, AI models will want to use the image as reference to generate code (e.g. UI mockups) anyways, so
         // it's not that critical to include the image analysis instructions.
+        const isAskMode = settings.selectedChatMode === "ask";
         if (hasUploadedAttachments) {
-          if (willUseLocalAgentStream) {
+          if (willUseLocalAgentStream && !isAskMode) {
             systemPrompt += `
 
 When files are attached to this conversation, upload them to the codebase using the \`write_file\` tool.
@@ -742,7 +741,7 @@ write_file(path="src/components/Button.jsx", content="DYAD_ATTACHMENT_0", descri
 \`\`\`
 
 `;
-          } else {
+          } else if (!isAskMode) {
             systemPrompt += `
   
 When files are attached to this conversation, upload them to the codebase using this exact format:
@@ -1029,11 +1028,11 @@ This conversation includes one or more image attachments. When the user uploads 
           return fullResponse;
         };
 
-        // Handle pro ask mode: use local-agent in read-only mode
-        // This gives pro users access to code reading tools while in ask mode
+        // Handle ask mode: use local-agent in read-only mode
+        // This gives users access to code reading tools while in ask mode
+        // Ask mode does not consume free agent quota
         if (
           settings.selectedChatMode === "ask" &&
-          isDyadProEnabled(settings) &&
           !mentionedAppsCodebases.length
         ) {
           // Reconstruct system prompt for local-agent read-only mode
@@ -1045,19 +1044,32 @@ This conversation includes one or more image attachments. When the user uploads 
             readOnly: true,
           });
 
-          await handleLocalAgentStream(event, req, abortController, {
-            placeholderMessageId: placeholderAssistantMessage.id,
-            // Note: this is using the read-only system prompt rather than the
-            // regular system prompt which gets overrides for special intents
-            // like summarize chat, security review, etc.
-            //
-            // This is OK because those intents should always happen in a new chat
-            // and new chats will default to non-ask modes.
-            systemPrompt: readOnlySystemPrompt,
-            dyadRequestId: dyadRequestId ?? "[no-request-id]",
-            readOnly: true,
-            messageOverride: isSummarizeIntent ? chatMessages : undefined,
-          });
+          // Return value indicates success/failure for quota tracking.
+          // Ask mode doesn't consume quota, but we still capture it for
+          // consistent error handling.
+          const streamSuccess = await handleLocalAgentStream(
+            event,
+            req,
+            abortController,
+            {
+              placeholderMessageId: placeholderAssistantMessage.id,
+              // Note: this is using the read-only system prompt rather than the
+              // regular system prompt which gets overrides for special intents
+              // like summarize chat, security review, etc.
+              //
+              // This is OK because those intents should always happen in a new chat
+              // and new chats will default to non-ask modes.
+              systemPrompt: readOnlySystemPrompt,
+              dyadRequestId: dyadRequestId ?? "[no-request-id]",
+              readOnly: true,
+              messageOverride: isSummarizeIntent ? chatMessages : undefined,
+            },
+          );
+          if (!streamSuccess) {
+            logger.warn(
+              "Ask mode local agent stream did not complete successfully",
+            );
+          }
           return;
         }
 

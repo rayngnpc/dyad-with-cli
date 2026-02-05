@@ -45,7 +45,7 @@ describe("searchReplaceTool", () => {
     supabaseOrganizationSlug: null,
     messageId: 1,
     isSharedModulesChanged: false,
-    isBasicAgentMode: false,
+    isDyadPro: false,
     todos: [],
     dyadRequestId: "test-request",
     fileEditTracker: {},
