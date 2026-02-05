@@ -592,22 +592,32 @@ export class PageObject {
     replaceDumpPath = false,
     timeout,
   }: { replaceDumpPath?: boolean; timeout?: number } = {}) {
-    if (replaceDumpPath) {
-      // Update page so that "[[dyad-dump-path=*]]" is replaced with a placeholder path
-      // which is stable across runs.
-      await this.page.evaluate(() => {
+    // Always scrub compaction backup paths — they contain system-specific
+    // temp directories and timestamps that change between runs.
+    // Also conditionally scrub dyad-dump-path placeholders.
+    await this.page.evaluate(
+      ({ replaceDumpPath }) => {
         const messagesList = document.querySelector(
           "[data-testid=messages-list]",
         );
         if (!messagesList) {
           throw new Error("Messages list not found");
         }
+        // Scrub compaction backup paths embedded in message text
+        // e.g. .dyad/chats/1/compaction-2026-02-05T21-25-24-285Z.md
         messagesList.innerHTML = messagesList.innerHTML.replace(
-          /\[\[dyad-dump-path=([^\]]+)\]\]/g,
-          "[[dyad-dump-path=*]]",
+          /\.dyad\/chats\/\d+\/compaction-[^\s<"]+\.md/g,
+          "[[compaction-backup-path]]",
         );
-      });
-    }
+        if (replaceDumpPath) {
+          messagesList.innerHTML = messagesList.innerHTML.replace(
+            /\[\[dyad-dump-path=([^\]]+)\]\]/g,
+            "[[dyad-dump-path=*]]",
+          );
+        }
+      },
+      { replaceDumpPath },
+    );
     await expect(this.page.getByTestId("messages-list")).toMatchAriaSnapshot({
       timeout,
     });
@@ -880,9 +890,14 @@ export class PageObject {
     }
 
     // Read the JSON file
-    const dumpContent: string = (
-      fs.readFileSync(dumpFilePath, "utf-8") as any
-    ).replaceAll(/\[\[dyad-dump-path=([^\]]+)\]\]/g, "[[dyad-dump-path=*]]");
+    const dumpContent: string = (fs.readFileSync(dumpFilePath, "utf-8") as any)
+      .replaceAll(/\[\[dyad-dump-path=([^\]]+)\]\]/g, "[[dyad-dump-path=*]]")
+      // Stabilize compaction backup file paths embedded in message text
+      // e.g. .dyad/chats/1/compaction-2026-02-05T21-25-24-285Z.md
+      .replaceAll(
+        /\.dyad\/chats\/\d+\/compaction-[^\s"\\]+\.md/g,
+        "[[compaction-backup-path]]",
+      );
     // Perform snapshot comparison
     const parsedDump = JSON.parse(dumpContent);
     if (type === "request") {

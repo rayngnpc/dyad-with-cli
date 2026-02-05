@@ -62,6 +62,12 @@ import { addIntegrationTool } from "./tools/add_integration";
 import { planningQuestionnaireTool } from "./tools/planning_questionnaire";
 import { writePlanTool } from "./tools/write_plan";
 import { exitPlanTool } from "./tools/exit_plan";
+import {
+  isChatPendingCompaction,
+  performCompaction,
+  checkAndMarkForCompaction,
+} from "@/ipc/handlers/compaction/compaction_handler";
+import { getPostCompactionMessages } from "@/ipc/handlers/compaction/compaction_utils";
 
 const logger = log.scope("local_agent_handler");
 
@@ -150,8 +156,8 @@ export async function handleLocalAgentStream(
     return false;
   }
 
-  // Get the chat and app
-  const chat = await db.query.chats.findFirst({
+  // Get the chat and app — may be re-queried after compaction
+  let chat = await db.query.chats.findFirst({
     where: eq(chats.id, req.chatId),
     with: {
       messages: {
@@ -166,6 +172,48 @@ export async function handleLocalAgentStream(
   }
 
   const appPath = getDyadAppPath(chat.app.path);
+
+  // Check if compaction is pending and enabled before processing the message
+  if (
+    settings.enableContextCompaction !== false &&
+    (await isChatPendingCompaction(req.chatId))
+  ) {
+    logger.info(`Performing pending compaction for chat ${req.chatId}`);
+    const compactionResult = await performCompaction(
+      event,
+      req.chatId,
+      appPath,
+      dyadRequestId,
+      (accumulatedSummary: string) => {
+        // Stream compaction summary to the frontend in real-time
+        // We temporarily set the placeholder content to show compaction progress;
+        // after compaction, the chat is re-queried and the placeholder is reset.
+        sendResponseChunk(
+          event,
+          req.chatId,
+          chat,
+          `<dyad-compaction title="Compacting conversation">\n${accumulatedSummary}\n</dyad-compaction>`,
+          placeholderMessageId,
+        );
+      },
+    );
+    if (!compactionResult.success) {
+      logger.warn(
+        `Compaction failed for chat ${req.chatId}: ${compactionResult.error}`,
+      );
+      // Continue anyway - compaction failure shouldn't block the conversation
+    }
+    // Re-query to pick up the newly inserted compaction summary message
+    chat = (await db.query.chats.findFirst({
+      where: eq(chats.id, req.chatId),
+      with: {
+        messages: {
+          orderBy: (messages, { asc }) => [asc(messages.createdAt)],
+        },
+        app: true,
+      },
+    }))!;
+  }
 
   // Send initial message update
   safeSend(event.sender, "chat:response:chunk", {
@@ -211,6 +259,7 @@ export async function handleLocalAgentStream(
           req.chatId,
           chat,
           fullResponse + streamingPreview,
+          placeholderMessageId,
         );
       },
       onXmlComplete: (finalXml: string) => {
@@ -218,7 +267,13 @@ export async function handleLocalAgentStream(
         fullResponse += finalXml + "\n";
         streamingPreview = ""; // Clear preview
         updateResponseInDb(placeholderMessageId, fullResponse);
-        sendResponseChunk(event, req.chatId, chat, fullResponse);
+        sendResponseChunk(
+          event,
+          req.chatId,
+          chat,
+          fullResponse,
+          placeholderMessageId,
+        );
       },
       requireConsent: async (params: {
         toolName: string;
@@ -254,9 +309,13 @@ export async function handleLocalAgentStream(
 
     // Prepare message history with graceful fallback
     // Use messageOverride if provided (e.g., for summarization)
+    // If a compaction summary exists, only include messages from that point onward
+    // (pre-compaction messages are preserved in DB for the user but not sent to LLM)
+    const relevantMessages = getPostCompactionMessages(chat.messages);
+
     const messageHistory: ModelMessage[] = messageOverride
       ? messageOverride
-      : chat.messages
+      : relevantMessages
           .filter((msg) => msg.content || msg.aiMessagesJson)
           .flatMap((msg) => parseAiMessagesJson(msg));
 
@@ -324,6 +383,9 @@ export async function handleLocalAgentStream(
             .set({ maxTokensUsed: totalTokens })
             .where(eq(messages.id, placeholderMessageId))
             .catch((err) => logger.error("Failed to save token count", err));
+
+          // Check if compaction should be triggered for the next message
+          await checkAndMarkForCompaction(req.chatId, totalTokens);
         }
       },
       onError: (error: any) => {
@@ -439,7 +501,13 @@ export async function handleLocalAgentStream(
       if (chunk) {
         fullResponse += chunk;
         await updateResponseInDb(placeholderMessageId, fullResponse);
-        sendResponseChunk(event, req.chatId, chat, fullResponse);
+        sendResponseChunk(
+          event,
+          req.chatId,
+          chat,
+          fullResponse,
+          placeholderMessageId,
+        );
       }
     }
 
@@ -542,13 +610,17 @@ function sendResponseChunk(
   chatId: number,
   chat: any,
   fullResponse: string,
+  placeholderMessageId: number,
 ) {
   const currentMessages = [...chat.messages];
-  if (currentMessages.length > 0) {
-    const lastMsg = currentMessages[currentMessages.length - 1];
-    if (lastMsg.role === "assistant") {
-      lastMsg.content = fullResponse;
-    }
+  // Find the placeholder message by ID rather than assuming it's the last
+  // assistant message. After compaction, a compaction summary message may
+  // exist after the placeholder and we must not overwrite it.
+  const placeholderMsg = currentMessages.find(
+    (m) => m.id === placeholderMessageId,
+  );
+  if (placeholderMsg) {
+    placeholderMsg.content = fullResponse;
   }
   safeSend(event.sender, "chat:response:chunk", {
     chatId,
