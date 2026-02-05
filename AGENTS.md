@@ -217,6 +217,15 @@ Add `#skip-bugbot` to the PR description for trivial PRs that won't affect end-u
 
 ## Learnings
 
+### Cross-repo PR workflows (forks)
+
+When running GitHub Actions with `pull_request_target` on cross-repo PRs (from forks):
+
+- The checkout action sets `origin` to the **fork** (head repo), not the base repo
+- To rebase onto the base repo's main, you must add an `upstream` remote: `git remote add upstream https://github.com/<base-repo>.git`
+- Remote setup for cross-repo PRs: `origin` → fork (push here), `upstream` → base repo (rebase from here)
+- The `GITHUB_TOKEN` can push to the fork if the PR author enabled "Allow edits from maintainers"
+
 ### TooltipTrigger render prop (Base UI)
 
 - `TooltipTrigger` from `@base-ui/react/tooltip` (wrapped in `src/components/ui/tooltip.tsx`) renders a `<button>` by default. Wrapping another button-like element (`<button>`, `<Button>`, `<DropdownMenuTrigger>`, `<PopoverTrigger>`, `<MiniSelectTrigger>`, `<ToggleGroupItem>`) inside it creates invalid nested `<button>` HTML. Use the `render` prop instead:
