@@ -26,9 +26,10 @@ Commit any uncommitted changes, run lint checks, fix any issues, and push the cu
    Run `git status` to check for any uncommitted changes (staged, unstaged, or untracked files).
 
    If there are uncommitted changes:
-   - Identify files that should NOT be committed (e.g., `.env`, `.env.*`, `credentials.*`, `*.secret`, `*.key`, `*.pem`, `.DS_Store`, `node_modules/`, `*.log`, temporary files, or anything that looks like it contains secrets or personal configuration)
-   - Stage and commit all OTHER files with a descriptive commit message summarizing the changes
-   - Keep track of any files you ignored so you can report them at the end
+   - **When in doubt, `git add` the files.** Assume changed/untracked files are related to the current work unless they are egregiously unrelated (e.g., completely different feature area with no connection to the current changes).
+   - Only exclude files that are clearly secrets or artifacts that should never be committed (e.g., `.env`, `.env.*`, `credentials.*`, `*.secret`, `*.key`, `*.pem`, `.DS_Store`, `node_modules/`, `*.log`).
+   - Stage and commit all relevant files with a descriptive commit message summarizing the changes.
+   - Keep track of any files you ignored so you can report them at the end.
 
    If there are no uncommitted changes, proceed to the next step.
 
@@ -85,6 +86,8 @@ Commit any uncommitted changes, run lint checks, fix any issues, and push the cu
 7. **Push the branch (REQUIRED):**
 
    You MUST push the branch to GitHub. Do NOT skip this step or ask for confirmation.
+
+   **CRITICAL:** You MUST NEVER run `git pull --rebase` (or any `git pull`) from the fork repo. If you need to pull/rebase, ONLY pull from the upstream repo (`dyad-sh/dyad`). Pulling from a fork can overwrite local changes or introduce unexpected commits from the fork's history.
 
    First, determine the correct remote to push to:
 
