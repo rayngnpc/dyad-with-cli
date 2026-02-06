@@ -1,12 +1,14 @@
 - paragraph: tc=create-error
 - paragraph: I will intentionally add an error
-- img
-- text: Index.tsx
-- button "Edit":
+- 'button "Index.tsx src/pages/Index.tsx Edit Summary: intentionally add an error"':
   - img
-- img
-- text: "src/pages/Index.tsx Summary: intentionally add an error"
-- button:
+  - text: ""
+  - button "Edit":
+    - img
+    - text: ""
+  - img
+  - text: ""
+- button "Copy":
   - img
 - img
 - text: Approved
@@ -19,17 +21,18 @@
 - paragraph:
   - text: "Fix error: Error Line 6 error Stack trace: Index ("
   - link /http:\/\/localhost:\d+\/src\/pages\/Index\.tsx:6:6/:
-    - /url: /http:\/\/localhost:\d+\/src\/pages\/Index\.tsx:6:6/
+    - /url: http://localhost:53524/src/pages/Index.tsx:6:6
   - text: )
 - text: plaintext
 - code: Fixing the error...
-- img
-- text: Index.tsx
-- button "Edit":
+- button "Index.tsx src/pages/Index.tsx Edit":
   - img
-- img
-- text: src/pages/Index.tsx
-- button:
+  - text: ""
+  - button "Edit":
+    - img
+    - text: ""
+  - img
+- button "Copy":
   - img
 - img
 - text: Approved
@@ -41,5 +44,7 @@
 - text: wrote 1 file(s)
 - button "Undo":
   - img
+  - text: ""
 - button "Retry":
   - img
+  - text: ""

@@ -1,10 +1,11 @@
 - paragraph: /Generate an AI_RULES\.md file for this app\. Describe the tech stack in 5-\d+ bullet points and describe clear rules about what libraries to use for what\./
-- img
-- text: file1.txt
-- button "Edit":
+- button "file1.txt file1.txt Edit":
   - img
-- img
-- text: file1.txt
+  - text: ""
+  - button "Edit":
+    - img
+    - text: ""
+  - img
 - paragraph: More EOM
 - button "Copy":
   - img
@@ -16,15 +17,17 @@
 - text: less than a minute ago
 - button "Copy Request ID":
   - img
+  - text: ""
 - paragraph: tc=local-agent/search-replace
 - paragraph: Let me first read the file to see its contents.
 - img
-- text: App.tsx Read src/App.tsx
+- text: Read src/App.tsx
 - paragraph: Now I'll use search_replace to update the text with proper context.
-- img
-- text: Search & Replace App.tsx
-- img
-- text: src/App.tsx
+- button "Search & Replace App.tsx src/App.tsx":
+  - img
+  - text: ""
+  - img
+  - text: ""
 - paragraph: Done! I've updated the message using search_replace. The edit was applied successfully.
 - button "Copy":
   - img
@@ -34,7 +37,10 @@
 - text: less than a minute ago
 - button "Copy Request ID":
   - img
+  - text: ""
 - button "Undo":
   - img
+  - text: ""
 - button "Retry":
   - img
+  - text: ""
