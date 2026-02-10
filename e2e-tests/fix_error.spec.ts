@@ -5,20 +5,20 @@ testSkipIfWindows("fix error with AI", async ({ po }) => {
   await po.setUp({ autoApprove: true });
   await po.sendPrompt("tc=create-error");
 
-  await po.snapshotPreviewErrorBanner();
+  await po.previewPanel.snapshotPreviewErrorBanner();
 
   await po.page.getByText("Error Line 6 error", { exact: true }).click();
-  await po.snapshotPreviewErrorBanner();
+  await po.previewPanel.snapshotPreviewErrorBanner();
 
-  await po.clickFixErrorWithAI();
-  await po.waitForChatCompletion();
+  await po.previewPanel.clickFixErrorWithAI();
+  await po.chatActions.waitForChatCompletion();
   await po.snapshotMessages();
 
   // TODO: this is an actual bug where the error banner should not
   // be shown, however there's some kind of race condition and
   // we don't reliably detect when the HMR update has completed.
-  // await po.locatePreviewErrorBanner().waitFor({ state: "hidden" });
-  await po.snapshotPreview();
+  // await po.previewPanel.locatePreviewErrorBanner().waitFor({ state: "hidden" });
+  await po.previewPanel.snapshotPreview();
 });
 
 testSkipIfWindows("copy error message from banner", async ({ po }) => {
@@ -29,7 +29,7 @@ testSkipIfWindows("copy error message from banner", async ({ po }) => {
     state: "visible",
   });
 
-  await po.clickCopyErrorMessage();
+  await po.previewPanel.clickCopyErrorMessage();
 
   const clipboardText = await po.getClipboardText();
   expect(clipboardText).toContain("Error Line 6 error");
@@ -45,8 +45,8 @@ test("fix all errors button", async ({ po }) => {
   await po.setUp({ autoApprove: true });
   await po.sendPrompt("tc=create-multiple-errors");
 
-  await po.clickFixAllErrors();
-  await po.waitForChatCompletion();
+  await po.previewPanel.clickFixAllErrors();
+  await po.chatActions.waitForChatCompletion();
 
   await po.snapshotMessages();
 });

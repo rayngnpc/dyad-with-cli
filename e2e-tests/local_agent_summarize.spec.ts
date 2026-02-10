@@ -14,7 +14,7 @@ testSkipIfWindows(
   async ({ po }) => {
     await po.setUpDyadPro({ localAgent: true });
     await po.importApp("minimal");
-    await po.selectLocalAgentMode();
+    await po.chatActions.selectLocalAgentMode();
 
     // First, send a message to create a chat with some content
     // This simulates a chat with technical discussion
@@ -27,7 +27,7 @@ testSkipIfWindows(
     const originalChatId = chatIdMatch![1];
 
     // Create a new chat by clicking the "New Chat" button
-    await po.clickNewChat();
+    await po.chatActions.clickNewChat();
 
     // Now trigger summarization by sending the summarize prompt
     // This is the same mechanism used by the "Summarize into new chat" button

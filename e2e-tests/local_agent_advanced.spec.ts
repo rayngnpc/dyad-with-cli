@@ -7,11 +7,11 @@ import { testSkipIfWindows } from "./helpers/test_helper";
 testSkipIfWindows("local-agent - security review fix", async ({ po }) => {
   await po.setUpDyadPro({ localAgent: true });
   await po.importApp("minimal");
-  await po.selectLocalAgentMode();
+  await po.chatActions.selectLocalAgentMode();
 
   // First, trigger a security review
-  await po.selectPreviewMode("security");
-  await po.clickRunSecurityReview();
+  await po.previewPanel.selectPreviewMode("security");
+  await po.securityReview.clickRunSecurityReview();
 
   await po.snapshotServerDump("all-messages");
 });
@@ -24,8 +24,8 @@ testSkipIfWindows("local-agent - mention apps", async ({ po }) => {
 
   // Import app and reference it.
   await po.importApp("minimal-with-ai-rules");
-  await po.goToAppsTab();
-  await po.selectLocalAgentMode();
+  await po.navigation.goToAppsTab();
+  await po.chatActions.selectLocalAgentMode();
 
   // Use @app:minimal-with-ai-rules to reference the other app
   await po.sendPrompt("[dump] @app:minimal-with-ai-rules hi");
@@ -38,7 +38,7 @@ testSkipIfWindows("local-agent - mention apps", async ({ po }) => {
  */
 testSkipIfWindows("local-agent - mcp tool call", async ({ po }) => {
   await po.setUpDyadPro({ localAgent: true });
-  await po.goToSettingsTab();
+  await po.navigation.goToSettingsTab();
   await po.page.getByRole("button", { name: "Tools (MCP)" }).click();
 
   // Configure the test MCP server
@@ -57,9 +57,9 @@ testSkipIfWindows("local-agent - mcp tool call", async ({ po }) => {
     .fill(testMcpServerPath);
   await po.page.getByRole("button", { name: "Add Server" }).click();
 
-  await po.goToAppsTab();
+  await po.navigation.goToAppsTab();
   await po.importApp("minimal");
-  await po.selectLocalAgentMode();
+  await po.chatActions.selectLocalAgentMode();
 
   // Send prompt that triggers MCP tool call
   await po.sendPrompt("tc=local-agent/mcp-calculator", {
@@ -67,11 +67,11 @@ testSkipIfWindows("local-agent - mcp tool call", async ({ po }) => {
   });
 
   // MCP tools require consent - wait for the consent banner
-  await po.waitForAgentConsentBanner();
-  await po.clickAgentConsentAlwaysAllow();
+  await po.agentConsent.waitForAgentConsentBanner();
+  await po.agentConsent.clickAgentConsentAlwaysAllow();
 
   // Wait for chat to complete
-  await po.waitForChatCompletion();
+  await po.chatActions.waitForChatCompletion();
 
   await po.snapshotMessages();
 });

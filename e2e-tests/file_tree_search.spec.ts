@@ -6,8 +6,8 @@ test("file tree search finds content matches and surfaces line numbers", async (
 }) => {
   await po.setUp({ autoApprove: true });
   await po.importApp("minimal");
-  await po.goToChatTab();
-  await po.selectPreviewMode("code");
+  await po.navigation.goToChatTab();
+  await po.previewPanel.selectPreviewMode("code");
   // Wait for the code view to finish loading files
   await expect(
     po.page.getByText("Loading files...", { exact: false }),

@@ -5,9 +5,9 @@ test("retry - should work", async ({ po }) => {
   await po.sendPrompt("[increment]");
   await po.snapshotMessages();
 
-  await po.dismissAllToasts();
-  await po.clickRetry();
-  await po.expectNoToast();
+  await po.toastNotifications.dismissAllToasts();
+  await po.chatActions.clickRetry();
+  await po.toastNotifications.expectNoToast();
   // The counter should be incremented in the snapshotted messages.
   await po.snapshotMessages();
 });

@@ -3,9 +3,9 @@ import { testSkipIfWindows, Timeout } from "./helpers/test_helper";
 testSkipIfWindows("capacitor upgrade and sync works", async ({ po }) => {
   await po.setUp();
   await po.sendPrompt("hi");
-  await po.getTitleBarAppNameButton().click();
-  await po.clickAppUpgradeButton({ upgradeId: "capacitor" });
-  await po.expectNoAppUpgrades();
+  await po.appManagement.getTitleBarAppNameButton().click();
+  await po.appManagement.clickAppUpgradeButton({ upgradeId: "capacitor" });
+  await po.appManagement.expectNoAppUpgrades();
   await po.snapshotAppFiles({ name: "upgraded-capacitor" });
 
   await po.page.getByTestId("capacitor-controls").waitFor({ state: "visible" });

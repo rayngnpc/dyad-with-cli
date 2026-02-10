@@ -8,7 +8,7 @@ import { testSkipIfWindows } from "./helpers/test_helper";
 testSkipIfWindows("local-agent - list_files", async ({ po }) => {
   await po.setUpDyadPro({ localAgent: true });
   await po.importApp("minimal");
-  await po.selectLocalAgentMode();
+  await po.chatActions.selectLocalAgentMode();
 
   await po.sendPrompt("tc=local-agent/list-files-non-recursive");
   await po.sendPrompt("tc=local-agent/list-files-recursive");
@@ -24,7 +24,7 @@ testSkipIfWindows("local-agent - list_files", async ({ po }) => {
 testSkipIfWindows("local-agent - list_files include_hidden", async ({ po }) => {
   await po.setUpDyadPro({ localAgent: true });
   await po.importApp("minimal-with-dyad");
-  await po.selectLocalAgentMode();
+  await po.chatActions.selectLocalAgentMode();
 
   await po.sendPrompt("tc=local-agent/list-files-include-hidden");
   const listFiles = po.page.getByTestId("dyad-list-files").first();

@@ -7,8 +7,8 @@ testSkipIfWindows("auto-approve", async ({ po }) => {
   await po.snapshotMessages();
 
   // This can be pretty slow because it's waiting for the app to build.
-  await expect(po.getPreviewIframeElement()).toBeVisible({
+  await expect(po.previewPanel.getPreviewIframeElement()).toBeVisible({
     timeout: Timeout.LONG,
   });
-  await po.snapshotPreview();
+  await po.previewPanel.snapshotPreview();
 });

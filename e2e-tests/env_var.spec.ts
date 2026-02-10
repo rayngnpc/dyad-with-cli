@@ -5,9 +5,9 @@ import fs from "fs";
 
 test("env var", async ({ po }) => {
   await po.sendPrompt("tc=1");
-  const appPath = await po.getCurrentAppPath();
+  const appPath = await po.appManagement.getCurrentAppPath();
 
-  await po.selectPreviewMode("configure");
+  await po.previewPanel.selectPreviewMode("configure");
 
   // Create a new env var
   await po.page

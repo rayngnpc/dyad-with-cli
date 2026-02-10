@@ -8,18 +8,18 @@ testSkipIfWindows("supabase - stale ui", async ({ po }) => {
 
   await po.page.getByText("Set up supabase").click();
   // On app details page:
-  await po.clickConnectSupabaseButton();
+  await po.appManagement.clickConnectSupabaseButton();
   // TODO: for some reason on Windows this navigates to the main (apps) page,
   // rather than the original chat page, so this test is skipped on Windows.
   // However, the underlying issue is platform-agnostic, so it seems OK to test
   // only on Mac.
-  await po.clickBackButton();
+  await po.navigation.clickBackButton();
 
   // On chat page:
   await po.snapshotMessages();
 
   // Create a second app; do NOT integrate it with Supabase, and make sure UI is correct.
-  await po.goToAppsTab();
+  await po.navigation.goToAppsTab();
   await po.sendPrompt("tc=add-supabase");
   await po.snapshotMessages();
 });

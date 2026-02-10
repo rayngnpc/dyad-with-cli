@@ -8,19 +8,19 @@ testSkipIfWindows("supabase branch selection works", async ({ po }) => {
 
   // Connect to Supabase
   await po.page.getByText("Set up supabase").click();
-  await po.clickConnectSupabaseButton();
-  await po.clickBackButton();
+  await po.appManagement.clickConnectSupabaseButton();
+  await po.navigation.clickBackButton();
   await po.toggleTokenBar();
   // The default branch has a small context.
   await expect(po.page.getByTestId("token-bar")).toContainText("6% of 128K");
   // We hide the token bar so we re-open it later to refresh the token count.
   await po.toggleTokenBar();
 
-  await po.getTitleBarAppNameButton().click();
+  await po.appManagement.getTitleBarAppNameButton().click();
   await po.page.getByTestId("supabase-branch-select").click();
   await po.page.getByRole("option", { name: "Test Branch" }).click();
 
-  await po.clickBackButton();
+  await po.navigation.clickBackButton();
   // The test branch has a large context (200k tokens) so it'll hit the 100% limit.
   // This is to make sure we're connecting to the right supabase project for the branch.
   await po.toggleTokenBar();

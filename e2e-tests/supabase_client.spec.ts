@@ -7,8 +7,8 @@ testSkipIfWindows("supabase client is generated", async ({ po }) => {
 
   // Connect to Supabase
   await po.page.getByText("Set up supabase").click();
-  await po.clickConnectSupabaseButton();
-  await po.clickBackButton();
+  await po.appManagement.clickConnectSupabaseButton();
+  await po.navigation.clickBackButton();
 
   await po.sendPrompt("tc=generate-supabase-client");
   await po.snapshotAppFiles({ name: "supabase-client-generated" });

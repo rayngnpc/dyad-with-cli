@@ -4,21 +4,23 @@ import { testSkipIfWindows } from "./helpers/test_helper";
 testSkipIfWindows("select component", async ({ po }) => {
   await po.setUp();
   await po.sendPrompt("tc=basic");
-  await po.clickTogglePreviewPanel();
-  await po.clickPreviewPickElement();
+  await po.previewPanel.clickTogglePreviewPanel();
+  await po.previewPanel.clickPreviewPickElement();
 
-  await po
+  await po.previewPanel
     .getPreviewIframeElement()
     .contentFrame()
     .getByRole("heading", { name: "Welcome to Your Blank App" })
     .click();
 
-  await po.snapshotPreview();
-  await po.snapshotSelectedComponentsDisplay();
+  await po.previewPanel.snapshotPreview();
+  await po.previewPanel.snapshotSelectedComponentsDisplay();
 
   await po.sendPrompt("[dump] make it smaller");
-  await po.snapshotPreview();
-  await expect(po.getSelectedComponentsDisplay()).not.toBeVisible();
+  await po.previewPanel.snapshotPreview();
+  await expect(
+    po.previewPanel.getSelectedComponentsDisplay(),
+  ).not.toBeVisible();
 
   await po.snapshotServerDump("all-messages");
 
@@ -30,27 +32,29 @@ testSkipIfWindows("select component", async ({ po }) => {
 testSkipIfWindows("select multiple components", async ({ po }) => {
   await po.setUp();
   await po.sendPrompt("tc=basic");
-  await po.clickTogglePreviewPanel();
-  await po.clickPreviewPickElement();
+  await po.previewPanel.clickTogglePreviewPanel();
+  await po.previewPanel.clickPreviewPickElement();
 
-  await po
+  await po.previewPanel
     .getPreviewIframeElement()
     .contentFrame()
     .getByRole("heading", { name: "Welcome to Your Blank App" })
     .click();
 
-  await po
+  await po.previewPanel
     .getPreviewIframeElement()
     .contentFrame()
     .getByText("Made with Dyad")
     .click();
 
-  await po.snapshotPreview();
-  await po.snapshotSelectedComponentsDisplay();
+  await po.previewPanel.snapshotPreview();
+  await po.previewPanel.snapshotSelectedComponentsDisplay();
 
   await po.sendPrompt("[dump] make both smaller");
-  await po.snapshotPreview();
-  await expect(po.getSelectedComponentsDisplay()).not.toBeVisible();
+  await po.previewPanel.snapshotPreview();
+  await expect(
+    po.previewPanel.getSelectedComponentsDisplay(),
+  ).not.toBeVisible();
 
   await po.snapshotServerDump("last-message");
 });
@@ -58,23 +62,25 @@ testSkipIfWindows("select multiple components", async ({ po }) => {
 testSkipIfWindows("deselect component", async ({ po }) => {
   await po.setUp();
   await po.sendPrompt("tc=basic");
-  await po.clickTogglePreviewPanel();
-  await po.clickPreviewPickElement();
+  await po.previewPanel.clickTogglePreviewPanel();
+  await po.previewPanel.clickPreviewPickElement();
 
-  await po
+  await po.previewPanel
     .getPreviewIframeElement()
     .contentFrame()
     .getByRole("heading", { name: "Welcome to Your Blank App" })
     .click();
 
-  await po.snapshotPreview();
-  await po.snapshotSelectedComponentsDisplay();
+  await po.previewPanel.snapshotPreview();
+  await po.previewPanel.snapshotSelectedComponentsDisplay();
 
   // Deselect the component and make sure the state has reverted
-  await po.clickDeselectComponent();
+  await po.previewPanel.clickDeselectComponent();
 
-  await po.snapshotPreview();
-  await expect(po.getSelectedComponentsDisplay()).not.toBeVisible();
+  await po.previewPanel.snapshotPreview();
+  await expect(
+    po.previewPanel.getSelectedComponentsDisplay(),
+  ).not.toBeVisible();
 
   // Send one more prompt to make sure it's a normal message.
   await po.sendPrompt("[dump] tc=basic");
@@ -86,49 +92,51 @@ testSkipIfWindows(
   async ({ po }) => {
     await po.setUp();
     await po.sendPrompt("tc=basic");
-    await po.clickTogglePreviewPanel();
-    await po.clickPreviewPickElement();
+    await po.previewPanel.clickTogglePreviewPanel();
+    await po.previewPanel.clickPreviewPickElement();
 
-    await po
+    await po.previewPanel
       .getPreviewIframeElement()
       .contentFrame()
       .getByRole("heading", { name: "Welcome to Your Blank App" })
       .click();
 
-    await po
+    await po.previewPanel
       .getPreviewIframeElement()
       .contentFrame()
       .getByText("Made with Dyad")
       .click();
 
-    await po.snapshotSelectedComponentsDisplay();
+    await po.previewPanel.snapshotSelectedComponentsDisplay();
 
-    await po.clickDeselectComponent({ index: 0 });
+    await po.previewPanel.clickDeselectComponent({ index: 0 });
 
-    await po.snapshotPreview();
-    await po.snapshotSelectedComponentsDisplay();
+    await po.previewPanel.snapshotPreview();
+    await po.previewPanel.snapshotSelectedComponentsDisplay();
 
-    await expect(po.getSelectedComponentsDisplay()).toBeVisible();
+    await expect(po.previewPanel.getSelectedComponentsDisplay()).toBeVisible();
   },
 );
 
 testSkipIfWindows("upgrade app to select component", async ({ po }) => {
   await po.setUp();
   await po.importApp("select-component");
-  await po.getTitleBarAppNameButton().click();
-  await po.clickAppUpgradeButton({ upgradeId: "component-tagger" });
-  await po.expectAppUpgradeButtonIsNotVisible({
+  await po.appManagement.getTitleBarAppNameButton().click();
+  await po.appManagement.clickAppUpgradeButton({
+    upgradeId: "component-tagger",
+  });
+  await po.appManagement.expectAppUpgradeButtonIsNotVisible({
     upgradeId: "component-tagger",
   });
   await po.snapshotAppFiles({ name: "app-upgraded" });
-  await po.clickOpenInChatButton();
+  await po.appManagement.clickOpenInChatButton();
   // There should be another version from the upgrade being committed.
   await expect(po.page.getByText("Version 2")).toBeVisible();
   await po.clickRestart();
 
-  await po.clickPreviewPickElement();
+  await po.previewPanel.clickPreviewPickElement();
 
-  await po
+  await po.previewPanel
     .getPreviewIframeElement()
     .contentFrame()
     .getByRole("heading", { name: "Launch Your Next Project" })
@@ -141,23 +149,23 @@ testSkipIfWindows("upgrade app to select component", async ({ po }) => {
 testSkipIfWindows("select component next.js", async ({ po }) => {
   await po.setUp();
 
-  await po.goToHubAndSelectTemplate("Next.js Template");
-  await po.selectChatMode("build");
+  await po.navigation.goToHubAndSelectTemplate("Next.js Template");
+  await po.chatActions.selectChatMode("build");
   await po.sendPrompt("tc=basic");
-  await po.clickTogglePreviewPanel();
-  await po.clickPreviewPickElement();
+  await po.previewPanel.clickTogglePreviewPanel();
+  await po.previewPanel.clickPreviewPickElement();
 
-  await po
+  await po.previewPanel
     .getPreviewIframeElement()
     .contentFrame()
     .getByRole("heading", { name: "Blank page" })
     .click();
 
-  await po.snapshotPreview();
-  await po.snapshotSelectedComponentsDisplay();
+  await po.previewPanel.snapshotPreview();
+  await po.previewPanel.snapshotSelectedComponentsDisplay();
 
   await po.sendPrompt("[dump] make it smaller");
-  await po.snapshotPreview();
+  await po.previewPanel.snapshotPreview();
 
   await po.snapshotServerDump("all-messages");
 });

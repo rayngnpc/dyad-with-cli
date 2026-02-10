@@ -15,7 +15,7 @@ testAzure("send message through Azure OpenAI", async ({ po }) => {
   await po.setUpAzure();
 
   // Select Azure model
-  await po.selectTestAzureModel();
+  await po.modelPicker.selectTestAzureModel();
 
   // Send a test prompt that returns a normal conversational response
   await po.sendPrompt("tc=basic");

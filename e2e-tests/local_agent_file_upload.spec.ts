@@ -13,10 +13,10 @@ import { testSkipIfWindows } from "./helpers/test_helper";
 testSkipIfWindows("local-agent - upload file to codebase", async ({ po }) => {
   await po.setUpDyadPro({ localAgent: true });
   await po.importApp("minimal");
-  await po.selectLocalAgentMode();
+  await po.chatActions.selectLocalAgentMode();
 
   // Open auxiliary actions menu
-  await po
+  await po.chatActions
     .getChatInputContainer()
     .getByTestId("auxiliary-actions-menu")
     .click();
@@ -42,7 +42,7 @@ testSkipIfWindows("local-agent - upload file to codebase", async ({ po }) => {
   await po.sendPrompt("tc=local-agent/upload-to-codebase");
 
   // Verify the file was written to the codebase
-  const appPath = await po.getCurrentAppPath();
+  const appPath = await po.appManagement.getCurrentAppPath();
   const filePath = path.join(appPath, "assets", "uploaded-file.png");
 
   // The file should exist

@@ -10,7 +10,7 @@ testSkipIfWindows("local-agent ask mode", async ({ po }) => {
   await po.importApp("minimal");
 
   // Select ask mode - local agent will be used in read-only mode for Pro users
-  await po.selectChatMode("ask");
+  await po.chatActions.selectChatMode("ask");
 
   // Test read-only tools work
   await po.sendPrompt("tc=local-agent/ask-read-file");

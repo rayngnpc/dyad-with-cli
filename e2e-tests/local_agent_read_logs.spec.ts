@@ -9,7 +9,7 @@ import { testSkipIfWindows } from "./helpers/test_helper";
 testSkipIfWindows("local-agent - read logs with filters", async ({ po }) => {
   await po.setUpDyadPro({ localAgent: true });
   await po.importApp("minimal");
-  await po.selectLocalAgentMode();
+  await po.chatActions.selectLocalAgentMode();
 
   // Send prompt that triggers read_logs with various filters
   // The fixture tests multiple filter combinations:

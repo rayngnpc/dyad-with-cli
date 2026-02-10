@@ -6,13 +6,13 @@ test("should open, navigate, and select from history menu", async ({ po }) => {
 
   // Send messages to populate history
   await po.sendPrompt("First test message");
-  await po.waitForChatCompletion();
+  await po.chatActions.waitForChatCompletion();
 
   await po.sendPrompt("Second test message");
-  await po.waitForChatCompletion();
+  await po.chatActions.waitForChatCompletion();
 
   // Click on the chat input to focus it
-  const chatInput = po.getChatInput();
+  const chatInput = po.chatActions.getChatInput();
   await chatInput.click();
   await chatInput.fill("");
 
@@ -54,7 +54,7 @@ test("should open, navigate, and select from history menu", async ({ po }) => {
   });
 
   // Clear input for mouse click test
-  await po.openChatHistoryMenu();
+  await po.chatActions.openChatHistoryMenu();
 
   // Click the first item (oldest message, at top)
   await menuItems.nth(0).click();
@@ -71,7 +71,7 @@ test("should handle edge cases: guards, escape, and sending after cancel", async
 }) => {
   await po.setUp({ autoApprove: true });
 
-  const chatInput = po.getChatInput();
+  const chatInput = po.chatActions.getChatInput();
   const historyMenu = po.page.locator('[data-mentions-menu="true"]');
 
   // Test 1: Empty history guard - menu should not open with no history
@@ -85,7 +85,7 @@ test("should handle edge cases: guards, escape, and sending after cancel", async
 
   // Create some history
   await po.sendPrompt("History entry for testing");
-  await po.waitForChatCompletion();
+  await po.chatActions.waitForChatCompletion();
 
   // Test 2: Non-empty input guard - menu should not open when input has content
   await chatInput.click();
@@ -99,7 +99,7 @@ test("should handle edge cases: guards, escape, and sending after cancel", async
   await expect(historyMenu).not.toBeVisible();
 
   // Test 3: Escape closes menu and clears input
-  await po.openChatHistoryMenu();
+  await po.chatActions.openChatHistoryMenu();
 
   await po.page.keyboard.press("Escape");
   await expect(historyMenu).not.toBeVisible();
@@ -109,7 +109,7 @@ test("should handle edge cases: guards, escape, and sending after cancel", async
   await chatInput.fill("New test message after escape");
   await po.page.keyboard.press("Enter");
 
-  await po.waitForChatCompletion();
+  await po.chatActions.waitForChatCompletion();
 
   // Verify the message was sent
   await expect(

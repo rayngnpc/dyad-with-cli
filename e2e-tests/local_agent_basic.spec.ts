@@ -8,7 +8,7 @@ import { testSkipIfWindows } from "./helpers/test_helper";
 testSkipIfWindows("local-agent - dump request", async ({ po }) => {
   await po.setUpDyadPro({ localAgent: true });
   await po.importApp("minimal");
-  await po.selectLocalAgentMode();
+  await po.chatActions.selectLocalAgentMode();
 
   await po.sendPrompt("[dump]");
 
@@ -19,7 +19,7 @@ testSkipIfWindows("local-agent - dump request", async ({ po }) => {
 testSkipIfWindows("local-agent - read then edit", async ({ po }) => {
   await po.setUpDyadPro({ localAgent: true });
   await po.importApp("minimal");
-  await po.selectLocalAgentMode();
+  await po.chatActions.selectLocalAgentMode();
 
   await po.sendPrompt("tc=local-agent/read-then-edit");
   await po.snapshotMessages();
@@ -32,7 +32,7 @@ testSkipIfWindows("local-agent - read then edit", async ({ po }) => {
 testSkipIfWindows("local-agent - parallel tool calls", async ({ po }) => {
   await po.setUpDyadPro({ localAgent: true });
   await po.importApp("minimal");
-  await po.selectLocalAgentMode();
+  await po.chatActions.selectLocalAgentMode();
 
   await po.sendPrompt("tc=local-agent/parallel-tools");
 

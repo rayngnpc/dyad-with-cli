@@ -7,7 +7,7 @@ test.describe("Favorite App Tests", () => {
 
     // Create a test app
     await po.sendPrompt("create a test app");
-    await po.goToAppsTab();
+    await po.navigation.goToAppsTab();
 
     // Get the app name from the UI (randomly generated)
     const appItems = await po.page.getByTestId(/^app-list-item-/).all();
@@ -43,7 +43,7 @@ test.describe("Favorite App Tests", () => {
 
     // Create a test app
     await po.sendPrompt("create a test app");
-    await po.goToAppsTab();
+    await po.navigation.goToAppsTab();
 
     // Get the app name from the UI
     const appItems = await po.page.getByTestId(/^app-list-item-/).all();

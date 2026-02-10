@@ -12,7 +12,7 @@ testSkipIfWindows(
   async ({ po }) => {
     await po.setUpDyadPro({ localAgent: true });
     await po.importApp("minimal");
-    await po.selectLocalAgentMode();
+    await po.chatActions.selectLocalAgentMode();
 
     // Send first message with a fixture that returns 200k token usage.
     // This exceeds the compaction threshold (min(80% of context window, 180k))

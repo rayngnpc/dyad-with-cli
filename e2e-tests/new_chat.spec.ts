@@ -10,7 +10,7 @@ newChatTestCases.forEach(({ name, clickOptions }) => {
     await po.setUp();
     await po.sendPrompt("tc=chat1");
     await po.snapshotMessages();
-    await po.clickNewChat(clickOptions);
+    await po.chatActions.clickNewChat(clickOptions);
 
     // Make sure it's empty
     await po.snapshotMessages();

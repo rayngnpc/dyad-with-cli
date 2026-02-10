@@ -14,7 +14,7 @@ testSkipIfWindows(
     await expect(picker).toBeEnabled({ timeout: Timeout.EXTRA_LONG });
 
     // Wait for iframe to load and app to render
-    const iframe = po.getPreviewIframeElement();
+    const iframe = po.previewPanel.getPreviewIframeElement();
     await expect(
       iframe.contentFrame().getByText("Console Logs Test App"),
     ).toBeVisible({
@@ -97,7 +97,7 @@ testSkipIfWindows(
     await expect(picker).toBeEnabled({ timeout: Timeout.EXTRA_LONG });
 
     // Wait for iframe to load - wait for content to appear
-    const iframe = po.getPreviewIframeElement();
+    const iframe = po.previewPanel.getPreviewIframeElement();
     const iframeFrame = iframe.contentFrame();
     await expect(
       iframeFrame.getByText("Network Requests Test App"),
@@ -208,7 +208,7 @@ testSkipIfWindows(
     await sendToChatButton.click({ timeout: Timeout.EXTRA_LONG });
 
     // Check that the chat input now contains the log information
-    const chatInput = po.getChatInput();
+    const chatInput = po.chatActions.getChatInput();
     const inputValue = await chatInput.textContent();
 
     // Verify the log was added to chat input
@@ -262,7 +262,7 @@ testSkipIfWindows("clear logs button clears all logs", async ({ po }) => {
   await expect(picker).toBeEnabled({ timeout: Timeout.EXTRA_LONG });
 
   // Wait for iframe to load
-  const iframe = po.getPreviewIframeElement();
+  const iframe = po.previewPanel.getPreviewIframeElement();
   await expect(
     iframe.contentFrame().getByText("Console Logs Test App"),
   ).toBeVisible({

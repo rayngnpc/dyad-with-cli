@@ -9,10 +9,10 @@ test("plan mode - accept plan redirects to new chat and saves to disk", async ({
   test.setTimeout(180000);
   await po.setUpDyadPro({ localAgent: true });
   await po.importApp("minimal");
-  await po.selectChatMode("plan");
+  await po.chatActions.selectChatMode("plan");
 
   // Get app path before accepting (needed to check saved plan)
-  const appPath = await po.getCurrentAppPath();
+  const appPath = await po.appManagement.getCurrentAppPath();
 
   // Trigger write_plan fixture
   await po.sendPrompt("tc=local-agent/accept-plan");
@@ -56,7 +56,7 @@ test("plan mode - questionnaire flow", async ({ po }) => {
   test.setTimeout(180000);
   await po.setUpDyadPro({ localAgent: true });
   await po.importApp("minimal");
-  await po.selectChatMode("plan");
+  await po.chatActions.selectChatMode("plan");
 
   // Trigger questionnaire fixture
   await po.sendPrompt("tc=local-agent/questionnaire");
@@ -73,7 +73,7 @@ test("plan mode - questionnaire flow", async ({ po }) => {
   await po.page.getByRole("button", { name: /Submit/ }).click();
 
   // Wait for the LLM response to the submitted answers
-  await po.waitForChatCompletion();
+  await po.chatActions.waitForChatCompletion();
 
   // Snapshot the messages
   await po.snapshotMessages();

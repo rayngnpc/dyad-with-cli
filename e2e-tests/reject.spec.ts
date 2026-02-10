@@ -10,5 +10,5 @@ test("reject", async ({ po }) => {
   // Should be slightly different from above, because it will say "rejected"
   await po.snapshotMessages();
 
-  await expect(po.getPreviewIframeElement()).not.toBeVisible();
+  await expect(po.previewPanel.getPreviewIframeElement()).not.toBeVisible();
 });

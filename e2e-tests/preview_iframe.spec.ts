@@ -5,6 +5,6 @@ testSkipIfWindows("preview iframe has sandbox attributes", async ({ po }) => {
   await po.setUp();
   await po.sendPrompt("hi");
   expect(
-    await po.getPreviewIframeElement().getAttribute("sandbox"),
+    await po.previewPanel.getPreviewIframeElement().getAttribute("sandbox"),
   ).toMatchSnapshot();
 });

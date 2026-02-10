@@ -11,15 +11,15 @@ testSkipIfWindows(
     await po.sendPrompt("basic");
 
     // Click the annotator button to activate annotator mode
-    await po.clickPreviewAnnotatorButton();
+    await po.previewPanel.clickPreviewAnnotatorButton();
 
     // Wait for annotator mode to be active
-    await po.waitForAnnotatorMode();
+    await po.previewPanel.waitForAnnotatorMode();
 
     // Submit the screenshot to chat
-    await po.clickAnnotatorSubmit();
+    await po.previewPanel.clickAnnotatorSubmit();
 
-    await expect(po.getChatInput()).toContainText(
+    await expect(po.chatActions.getChatInput()).toContainText(
       "Please update the UI based on these screenshots",
     );
 
