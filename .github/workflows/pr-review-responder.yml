@@ -105,22 +105,9 @@ jobs:
             // Guard: do not loop more than 3 retries (4 total runs: initial + 3 retries)
             // cc:request (0) -> cc:request:1 (1) -> cc:request:2 (2) -> cc:request:3 (3) -> blocked
             if (requestCount >= 4) {
-              console.log(`PR #${prNumber} has reached max retry count (${requestCount}), adding cc:needs-human-review`);
+              console.log(`PR #${prNumber} has reached max retry count (${requestCount}), adding needs-human:review-issue`);
 
-              // Ensure the label exists
-              try {
-                await github.rest.issues.createLabel({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  name: 'cc:needs-human-review',
-                  color: 'd93f0b',
-                  description: 'Claude Code has exhausted auto-retries; needs human review'
-                });
-              } catch (e) {
-                // Label already exists, ignore
-              }
-
-              // Remove current label, cc:pending, and add needs-human-review
+              // Remove current label, cc:pending
               await github.rest.issues.removeLabel({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -135,13 +122,22 @@ jobs:
                 name: 'cc:pending'
               }).catch(() => {});
 
+              // Also add needs-human:review-issue (retries exhausted = needs human attention).
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: prNumber,
-                labels: ['cc:needs-human-review']
+                labels: ['needs-human:review-issue']
               });
 
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                name: 'needs-human:final-check'
+              }).catch(() => {});
+
+              core.setOutput('pr_number', prNumber);
               core.setOutput('should_continue', 'false');
               return;
             }
@@ -248,26 +244,6 @@ jobs:
             echo "commits_pushed=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Ensure next request label exists
-        # Use always() so retry loop continues even if Claude Code fails after pushing commits
-        if: steps.pr-info.outputs.should_continue == 'true' && always() && steps.retrigger.outputs.commits_pushed == 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const nextCount = parseInt('${{ steps.pr-info.outputs.request_count }}', 10) + 1;
-            const labelName = `cc:request:${nextCount}`;
-            try {
-              await github.rest.issues.createLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                name: labelName,
-                color: '1d76db',
-                description: `Claude Code auto-re-request iteration ${nextCount}`
-              });
-            } catch (e) {
-              // Label already exists, ignore
-            }
-
       - name: Update labels - re-request review (commits pushed)
         # Use always() so retry loop continues even if Claude Code fails after pushing commits
         if: steps.pr-info.outputs.should_continue == 'true' && always() && steps.retrigger.outputs.commits_pushed == 'true'
@@ -292,3 +268,36 @@ jobs:
           gh pr edit ${{ steps.pr-info.outputs.pr_number }} --repo ${{ github.repository }} --remove-label "cc:pending" --add-label "cc:failed"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout base repo for labeler script
+        # The earlier checkout (line 186) checks out the PR head repo, which for
+        # fork PRs may not contain scripts/pr-status-labeler.js. Checkout the
+        # base repo's default branch to a separate path so the script is always available.
+        if: >-
+          steps.pr-info.outputs.should_continue == 'true' &&
+          always() &&
+          steps.retrigger.outputs.commits_pushed != 'true'
+        uses: actions/checkout@v5
+        with:
+          path: __base
+          sparse-checkout: scripts/pr-status-labeler.js
+
+      - name: Apply needs-human status label
+        # Run when PR reaches a terminal state (cc:done or cc:failed) but NOT when
+        # commits were pushed (retry loop continues). Uses always() to run even if
+        # the Claude Code step failed.
+        if: >-
+          steps.pr-info.outputs.should_continue == 'true' &&
+          always() &&
+          steps.retrigger.outputs.commits_pushed != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { run } = require('./__base/scripts/pr-status-labeler.js');
+            await run({
+              github,
+              context,
+              core,
+              prNumber: parseInt('${{ steps.pr-info.outputs.pr_number }}', 10),
+              ciConclusion: '${{ github.event.workflow_run.conclusion }}'
+            });
