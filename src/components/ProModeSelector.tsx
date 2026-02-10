@@ -12,6 +12,12 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
+import {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from "@/components/ui/accordion";
 import { useSettings } from "@/hooks/useSettings";
 import { ipc } from "@/ipc/types";
 import { hasDyadProKey, type UserSettings } from "@/lib/schemas";
@@ -95,7 +101,7 @@ export function ProModeSelector() {
               </a>
             </div>
           )}
-          <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-3">
             <SelectorRow
               id="pro-enabled"
               label="Enable Dyad Pro"
@@ -104,25 +110,39 @@ export function ProModeSelector() {
               settingEnabled={Boolean(settings?.enableDyadPro)}
               toggle={toggleProEnabled}
             />
-            <SelectorRow
-              id="web-search"
-              label="Web Access"
-              tooltip="Allows Dyad to access the web (e.g. search for information)"
-              isTogglable={proModeTogglable}
-              settingEnabled={Boolean(settings?.enableProWebSearch)}
-              toggle={toggleWebSearch}
-            />
+            <Accordion>
+              <AccordionItem
+                value="build-mode-settings"
+                className="rounded-lg border border-border/60 bg-muted/30 px-3 border-b-0"
+              >
+                <AccordionTrigger className="cursor-pointer py-2 text-foreground/80 hover:text-foreground hover:no-underline">
+                  Build mode settings
+                </AccordionTrigger>
+                <AccordionContent className="pb-3">
+                  <div className="flex flex-col gap-5 pt-2">
+                    <SelectorRow
+                      id="web-search"
+                      label="Web Access"
+                      tooltip="Allows Dyad to access the web (e.g. search for information)"
+                      isTogglable={proModeTogglable}
+                      settingEnabled={Boolean(settings?.enableProWebSearch)}
+                      toggle={toggleWebSearch}
+                    />
 
-            <TurboEditsSelector
-              isTogglable={proModeTogglable}
-              settings={settings}
-              onValueChange={handleTurboEditsChange}
-            />
-            <SmartContextSelector
-              isTogglable={proModeTogglable}
-              settings={settings}
-              onValueChange={handleSmartContextChange}
-            />
+                    <TurboEditsSelector
+                      isTogglable={proModeTogglable}
+                      settings={settings}
+                      onValueChange={handleTurboEditsChange}
+                    />
+                    <SmartContextSelector
+                      isTogglable={proModeTogglable}
+                      settings={settings}
+                      onValueChange={handleSmartContextChange}
+                    />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           </div>
         </div>
       </PopoverContent>
