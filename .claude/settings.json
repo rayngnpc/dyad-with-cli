@@ -56,6 +56,11 @@
       "Bash(PLAYWRIGHT_HTML_OPEN=never npm run e2e:*)",
       "Bash(DEBUG=pw:browser PLAYWRIGHT_HTML_OPEN=never npm run e2e:*)",
       "Bash(npx playwright show-trace:*)",
+      "Bash(npx playwright test:*)",
+      "Bash(PLAYWRIGHT_HTML_OPEN=never npx playwright test:*)",
+      "Bash(rm -f e2e-tests/screencast-demo.spec.ts)",
+      "Bash(rm -rf e2e-tests/screencast-screenshots)",
+      "Bash(rm -rf test-results/screencast-demo*)",
 
       "Bash(git:*)",
 
