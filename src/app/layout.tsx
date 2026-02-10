@@ -13,12 +13,11 @@ import {
   selectedAppIdAtom,
 } from "@/atoms/appAtoms";
 import { useSettings } from "@/hooks/useSettings";
-import type { ZoomLevel } from "@/lib/schemas";
+import { DEFAULT_ZOOM_LEVEL } from "@/lib/schemas";
 import { selectedComponentsPreviewAtom } from "@/atoms/previewAtoms";
 import { chatInputValueAtom } from "@/atoms/chatAtoms";
 import { usePlanEvents } from "@/hooks/usePlanEvents";
-
-const DEFAULT_ZOOM_LEVEL: ZoomLevel = "100";
+import { useZoomShortcuts } from "@/hooks/useZoomShortcuts";
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   const { refreshAppIframe } = useRunApp();
@@ -35,6 +34,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
   // Initialize plan events listener
   usePlanEvents();
+
+  // Zoom keyboard shortcuts (Ctrl/Cmd + =/- /0)
+  useZoomShortcuts();
 
   useEffect(() => {
     const zoomLevel = settings?.zoomLevel ?? DEFAULT_ZOOM_LEVEL;
