@@ -1,4 +1,4 @@
-# Nightly disk cleanup for self-hosted macOS CI runners (ci1, ci2).
+# Nightly disk cleanup for self-hosted macOS CI runners.
 # Runs at 4:00 AM PST to prevent disk exhaustion from CI workloads.
 # Safe to run manually via workflow_dispatch for testing.
 
@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ci1, ci2]
+        runner: [ci1, ci2, ci3]
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout (for cleanup script)
