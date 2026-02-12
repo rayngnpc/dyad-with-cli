@@ -55,6 +55,7 @@ import { useVersions } from "@/hooks/useVersions";
 import { useAttachments } from "@/hooks/useAttachments";
 import { AttachmentsList } from "./AttachmentsList";
 import { DragDropOverlay } from "./DragDropOverlay";
+import { FileAttachmentTypeDialog } from "./FileAttachmentTypeDialog";
 import { showExtraFilesToast, showInfo } from "@/lib/toast";
 import { useSummarizeInNewChat } from "./SummarizeInNewChatButton";
 import { ChatInputControls } from "../ChatInputControls";
@@ -147,6 +148,7 @@ export function ChatInput({ chatId }: { chatId?: number }) {
   const {
     attachments,
     isDraggingOver,
+    pendingFiles,
     handleFileSelect,
     removeAttachment,
     handleDragOver,
@@ -154,6 +156,8 @@ export function ChatInput({ chatId }: { chatId?: number }) {
     handleDrop,
     clearAttachments,
     handlePaste,
+    confirmPendingFiles,
+    cancelPendingFiles,
   } = useAttachments();
 
   // Use the hook to fetch the proposal
@@ -241,7 +245,8 @@ export function ChatInput({ chatId }: { chatId?: number }) {
     if (
       (!inputValue.trim() && attachments.length === 0) ||
       isStreaming ||
-      !chatId
+      !chatId ||
+      pendingFiles
     ) {
       return;
     }
@@ -553,6 +558,13 @@ export function ChatInput({ chatId }: { chatId?: number }) {
 
           {/* Use the DragDropOverlay component */}
           <DragDropOverlay isDraggingOver={isDraggingOver} />
+
+          {/* Dialog for choosing attachment type */}
+          <FileAttachmentTypeDialog
+            pendingFiles={pendingFiles}
+            onConfirm={confirmPendingFiles}
+            onCancel={cancelPendingFiles}
+          />
 
           <div className="flex items-start space-x-2 ">
             <LexicalChatInput
