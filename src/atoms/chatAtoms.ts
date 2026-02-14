@@ -1,4 +1,9 @@
-import type { FileAttachment, Message, AgentTodo } from "@/ipc/types";
+import type {
+  FileAttachment,
+  Message,
+  AgentTodo,
+  ComponentSelection,
+} from "@/ipc/types";
 import type { Getter, Setter } from "jotai";
 import { atom } from "jotai";
 
@@ -207,3 +212,22 @@ export const agentTodosByChatIdAtom = atom<Map<number, AgentTodo[]>>(new Map());
 
 // Flag: set when user switches to plan mode from another mode in a chat with messages
 export const needsFreshPlanChatAtom = atom<boolean>(false);
+
+// Queued messages (multiple messages per chat, sent in sequence after streams complete)
+export interface QueuedMessageItem {
+  id: string; // UUID for stable identification during reordering/editing
+  prompt: string;
+  attachments?: FileAttachment[];
+  selectedComponents?: ComponentSelection[];
+}
+
+// Map<chatId, QueuedMessageItem[]>
+export const queuedMessagesByIdAtom = atom<Map<number, QueuedMessageItem[]>>(
+  new Map(),
+);
+
+// Tracks whether the last stream for a chat completed successfully (via onEnd, not cancelled or errored)
+// This is used to safely process the queue only when we're certain the stream finished normally
+export const streamCompletedSuccessfullyByIdAtom = atom<Map<number, boolean>>(
+  new Map(),
+);
