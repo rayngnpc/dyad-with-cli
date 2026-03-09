@@ -43,6 +43,7 @@ jobs:
           permission-actions: write
           permission-contents: write
           permission-pull-requests: write
+          permission-workflows: write
 
       - name: Get PR info and check labels
         id: pr-info
@@ -224,6 +225,7 @@ jobs:
           owner: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.owner.login || github.event.workflow_run.head_repository.owner.login }}
           repositories: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.name || github.event.workflow_run.head_repository.name }}
           permission-contents: write
+          permission-workflows: write
 
       - name: Checkout repository
         if: steps.pr-info.outputs.should_continue == 'true'
@@ -281,6 +283,7 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ steps.base-app-token.outputs.token }}
           claude_args: --model claude-opus-4-6
+          display_report: true
           prompt: |
             Run the following skill end-to-end. Execute every step sequentially. Do not skip, summarize, or stop early.
 
@@ -289,18 +292,13 @@ jobs:
       - name: Push any unpushed changes
         # In case the previous step accidentally forgot to push its changes
         if: steps.pr-info.outputs.should_continue == 'true' && always()
-        uses: anthropics/claude-code-action@v1
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ steps.base-app-token.outputs.token }}
-          claude_args: --model claude-opus-4-6
-          prompt: |
-            The previous step may have made local commits but
-            accidentally forgot to push them to the origin remote. Run the following skill to
-            push any unpushed changes. If there are no unpushed commits, that's fine — just
-            exit successfully.
-
-            /dyad:fast-push
+        run: |
+          if [ "$(git rev-list --count @{u}..HEAD 2>/dev/null || echo '0')" -gt 0 ]; then
+            echo "Local branch is ahead of upstream, pushing..."
+            git push --force-with-lease
+          else
+            echo "No unpushed commits"
+          fi
 
       - name: Check if commits were pushed
         # Use always() to ensure we detect commits even if Claude Code fails partway through.
