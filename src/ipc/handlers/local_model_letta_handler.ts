@@ -49,35 +49,38 @@ interface LettaModelInfo {
  * Letta uses -m flag with model handles
  */
 function getLettaModels(): LettaModelInfo[] {
-  // Letta supports various models through its -m flag
-  // These are the model handles available from `letta --help`
+  // Model handles verified from Letta Code v0.18.4
   const models: LettaModelInfo[] = [
     { model: "auto", displayName: "Auto (Default)" },
-    // Anthropic models
-    { model: "opus", displayName: "Claude Opus 4.5" },
-    { model: "opus-4.1", displayName: "Claude Opus 4.1" },
-    { model: "sonnet-4.5", displayName: "Claude Sonnet 4.5" },
-    { model: "sonnet-4.5-no-reasoning", displayName: "Claude Sonnet 4.5 (No Reasoning)" },
-    { model: "haiku", displayName: "Claude Haiku 4.5" },
-    // OpenAI models
+    // Anthropic
+    { model: "claude-opus-4-6", displayName: "Claude Opus 4.6" },
+    { model: "claude-sonnet-4-6", displayName: "Claude Sonnet 4.6" },
+    { model: "claude-opus-4-5", displayName: "Claude Opus 4.5" },
+    { model: "claude-sonnet-4-5-20250929", displayName: "Claude Sonnet 4.5" },
+    { model: "claude-sonnet-4-20250514", displayName: "Claude Sonnet 4" },
+    // OpenAI
+    { model: "gpt-5.2", displayName: "GPT-5.2" },
+    { model: "gpt-5.1", displayName: "GPT-5.1" },
+    { model: "gpt-5.1-codex", displayName: "GPT-5.1 Codex" },
+    { model: "gpt-5.1-codex-mini", displayName: "GPT-5.1 Codex Mini" },
+    { model: "gpt-5", displayName: "GPT-5" },
     { model: "gpt-5-codex", displayName: "GPT-5 Codex" },
-    { model: "gpt-5.2-medium", displayName: "GPT-5.2 (Medium)" },
-    { model: "gpt-5.2-high", displayName: "GPT-5.2 (High)" },
-    { model: "gpt-5.1-medium", displayName: "GPT-5.1 (Medium)" },
-    { model: "gpt-5.1-high", displayName: "GPT-5.1 (High)" },
-    { model: "gpt-5.1-codex-medium", displayName: "GPT-5.1 Codex (Medium)" },
-    { model: "gpt-5.1-codex-high", displayName: "GPT-5.1 Codex (High)" },
-    { model: "gpt-5-medium", displayName: "GPT-5 (Medium)" },
-    { model: "gpt-5-high", displayName: "GPT-5 (High)" },
-    { model: "gpt-4.1", displayName: "GPT-4.1" },
-    { model: "o4-mini", displayName: "O4 Mini" },
-    // Google models
-    { model: "gemini-3", displayName: "Gemini 3 Pro" },
-    { model: "gemini-pro", displayName: "Gemini 2.5 Pro" },
-    { model: "gemini-flash", displayName: "Gemini 2.5 Flash" },
-    // Other models
-    { model: "deepseek-chat-v3.1", displayName: "DeepSeek Chat v3.1" },
-    { model: "kimi-k2", displayName: "Kimi K2" },
+    { model: "gpt-5-mini", displayName: "GPT-5 Mini" },
+    { model: "gpt-5-nano", displayName: "GPT-5 Nano" },
+    // Google
+    { model: "gemini-3.1-pro-preview", displayName: "Gemini 3.1 Pro (Preview)" },
+    { model: "gemini-3-flash-preview", displayName: "Gemini 3 Flash (Preview)" },
+    { model: "gemini-2.5-pro", displayName: "Gemini 2.5 Pro" },
+    { model: "gemini-flash-latest", displayName: "Gemini 2.5 Flash" },
+    // xAI
+    { model: "grok-4", displayName: "Grok 4" },
+    { model: "grok-code-fast-1", displayName: "Grok Code Fast" },
+    { model: "grok-3", displayName: "Grok 3" },
+    // OpenRouter
+    { model: "qwen/qwen3-coder", displayName: "Qwen3 Coder (OpenRouter)" },
+    { model: "deepseek/deepseek-chat-v3.1", displayName: "DeepSeek v3.1 (OpenRouter)" },
+    { model: "moonshotai/kimi-k2.5", displayName: "Kimi K2.5 (OpenRouter)" },
+    { model: "openrouter/free", displayName: "Free (OpenRouter)" },
   ];
 
   return models;
