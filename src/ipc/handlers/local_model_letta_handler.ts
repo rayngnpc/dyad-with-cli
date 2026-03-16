@@ -80,6 +80,9 @@ function getLettaModels(): LettaModelInfo[] {
     { model: "qwen/qwen3-coder", displayName: "Qwen3 Coder (OpenRouter)" },
     { model: "deepseek/deepseek-chat-v3.1", displayName: "DeepSeek v3.1 (OpenRouter)" },
     { model: "moonshotai/kimi-k2.5", displayName: "Kimi K2.5 (OpenRouter)" },
+    { model: "z-ai/glm-5", displayName: "GLM-5 (OpenRouter)" },
+    { model: "z-ai/glm-4.7", displayName: "GLM-4.7 (OpenRouter)" },
+    { model: "minimax/minimax-m2.5", displayName: "MiniMax M2.5 (OpenRouter)" },
     { model: "openrouter/free", displayName: "Free (OpenRouter)" },
   ];
 
