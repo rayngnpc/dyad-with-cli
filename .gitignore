@@ -113,3 +113,6 @@ __pycache__/
 
 # Storybook
 storybook-static/
+
+# Letta CLI local config
+.letta/

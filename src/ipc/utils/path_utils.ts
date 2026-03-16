@@ -1,16 +1,6 @@
 import path from "node:path";
 
 /**
- * Safely joins paths while ensuring the result stays within the base directory.
- * This prevents directory traversal attacks where malicious paths like "../../etc/passwd"
- * could be used to access files outside the intended directory.
- *
- * @param basePath The base directory that should contain the result
- * @param ...paths Path segments to join with the base path
- * @returns The joined path if it's within the base directory
- * @throws Error if the resulting path would be outside the base directory
- */
-/**
  * If filePath is an absolute path that lives inside basePath, converts it to
  * a relative path. This handles the case where an AI model outputs a full
  * absolute path (e.g. "/home/user/app/src/foo.ts") instead of a relative one
@@ -33,6 +23,16 @@ export function normalizeToRelativePath(
   return filePath;
 }
 
+/**
+ * Safely joins paths while ensuring the result stays within the base directory.
+ * This prevents directory traversal attacks where malicious paths like "../../etc/passwd"
+ * could be used to access files outside the intended directory.
+ *
+ * @param basePath The base directory that should contain the result
+ * @param ...paths Path segments to join with the base path
+ * @returns The joined path if it's within the base directory
+ * @throws Error if the resulting path would be outside the base directory
+ */
 export function safeJoin(basePath: string, ...paths: string[]): string {
   // Check if any of the path segments are absolute paths (which would be unsafe)
   for (const pathSegment of paths) {
