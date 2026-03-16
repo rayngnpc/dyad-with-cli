@@ -1,7 +1,10 @@
 import { spawn } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 import type { LanguageModelV2 } from "@ai-sdk/provider";
 import log from "electron-log";
 import { getLettaPath, isLettaAvailable } from "../handlers/local_model_letta_handler";
+import { getUserDataPath } from "../../paths/paths";
 
 const logger = log.scope("letta_cli_provider");
 
@@ -57,9 +60,50 @@ type LettaStreamEvent = LettaInitEvent | LettaMessageEvent | LettaResultEvent;
 // Module-level state for the current working directory
 let currentWorkingDirectory: string | undefined;
 
-// Session management - map of appId/chatId to Letta agent ID
+// Session management - persisted to disk so sessions survive Dyad restarts
 const sessionMap = new Map<string, string>();
 let currentSessionKey: string | undefined;
+let sessionMapLoaded = false;
+
+// Track which sessions have already received the system prompt
+const sessionSystemPromptSent = new Set<string>();
+
+function getSessionMapPath(): string {
+  return path.join(getUserDataPath(), "letta-sessions.json");
+}
+
+function loadSessionMap(): void {
+  if (sessionMapLoaded) return;
+  sessionMapLoaded = true;
+  try {
+    const filePath = getSessionMapPath();
+    if (fs.existsSync(filePath)) {
+      const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+      if (data && typeof data === "object") {
+        for (const [key, value] of Object.entries(data)) {
+          if (typeof value === "string") sessionMap.set(key, value);
+        }
+        logger.info(`Loaded ${sessionMap.size} Letta sessions from disk`);
+      }
+    }
+  } catch (err) {
+    logger.warn(`Failed to load Letta session map from disk: ${err}`);
+  }
+}
+
+function saveSessionMap(): void {
+  try {
+    const filePath = getSessionMapPath();
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const data: Record<string, string> = {};
+    for (const [key, value] of sessionMap.entries()) data[key] = value;
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
+    logger.debug(`Saved ${sessionMap.size} Letta sessions to disk`);
+  } catch (err) {
+    logger.warn(`Failed to save Letta session map to disk: ${err}`);
+  }
+}
 
 /**
  * Set the working directory for Letta CLI operations
@@ -73,11 +117,11 @@ export function setLettaWorkingDirectory(cwd: string | undefined): void {
 
 /**
  * Set the session key for the current chat (used to persist sessions)
- * The key should be unique per app/chat combination (e.g., "appId-chatId")
  */
 export function setLettaSessionKey(key: string | undefined): void {
   currentSessionKey = key;
   if (key) {
+    loadSessionMap();
     logger.info(`Letta session key set to: ${key}`);
   }
 }
@@ -86,6 +130,7 @@ export function setLettaSessionKey(key: string | undefined): void {
  * Get the stored agent ID for a given key
  */
 export function getLettaSessionId(key: string): string | undefined {
+  loadSessionMap();
   return sessionMap.get(key);
 }
 
@@ -94,6 +139,7 @@ export function getLettaSessionId(key: string): string | undefined {
  */
 function storeSessionId(key: string, agentId: string): void {
   sessionMap.set(key, agentId);
+  saveSessionMap();
   logger.info(`Stored Letta agent ID: ${agentId} for key: ${key}`);
 }
 
@@ -102,6 +148,8 @@ function storeSessionId(key: string, agentId: string): void {
  */
 export function clearLettaSession(key: string): void {
   sessionMap.delete(key);
+  sessionSystemPromptSent.delete(key);
+  saveSessionMap();
   logger.info(`Cleared Letta session for key: ${key}`);
 }
 
@@ -146,9 +194,10 @@ export function createLettaProvider(
       
       async doGenerate(options): Promise<any> {
         const { prompt, abortSignal } = options;
-        
-        const userMessage = extractUserMessage(prompt);
-        
+
+        const sessionAlreadyHasSystemPrompt = !!(currentSessionKey && sessionSystemPromptSent.has(currentSessionKey));
+        const userMessage = extractUserMessage(prompt, !sessionAlreadyHasSystemPrompt);
+
         return new Promise((resolve, reject) => {
           const lettaPath = getLettaPath();
           const args: string[] = ["-p", userMessage, "--output-format", "json"];
@@ -164,6 +213,7 @@ export function createLettaProvider(
               args.push("-a", existingAgentId);
               logger.info(`Continuing Letta session with agent: ${existingAgentId}`);
             }
+            sessionSystemPromptSent.add(currentSessionKey);
           }
 
           logger.info(`Letta CLI doGenerate with model: ${effectiveModel}, cwd: ${currentWorkingDirectory || process.cwd()}`);
@@ -228,9 +278,10 @@ export function createLettaProvider(
 
       async doStream(options): Promise<any> {
         const { prompt, abortSignal } = options;
-        
-        const userMessage = extractUserMessage(prompt);
-        
+
+        const sessionAlreadyHasSystemPrompt = !!(currentSessionKey && sessionSystemPromptSent.has(currentSessionKey));
+        const userMessage = extractUserMessage(prompt, !sessionAlreadyHasSystemPrompt);
+
         const lettaPath = getLettaPath();
         const args = ["-p", userMessage, "--output-format", "stream-json"];
 
@@ -245,6 +296,7 @@ export function createLettaProvider(
             args.push("-a", existingAgentId);
             logger.info(`Continuing Letta session with agent: ${existingAgentId}`);
           }
+          sessionSystemPromptSent.add(currentSessionKey);
         }
 
         logger.info(`Letta CLI doStream with model: ${effectiveModel}, cwd: ${currentWorkingDirectory || process.cwd()}`);
@@ -505,18 +557,20 @@ export function createLettaProvider(
 }
 
 /**
- * Extract the user message from a prompt array, including system prompt if present
+ * Extract the user message from a prompt array.
+ * includeSystemPrompt controls whether the system prompt is prepended.
+ * On subsequent turns of the same Letta session, omit it — the agent
+ * already has it in its memory.
  */
-function extractUserMessage(prompt: any): string {
+function extractUserMessage(prompt: any, includeSystemPrompt: boolean): string {
   let userMessage = "";
   let systemPrompt = "";
-  
+
   if (typeof prompt === "string") {
     return prompt;
   }
-  
+
   if (Array.isArray(prompt)) {
-    // First, extract system prompt if present
     for (const msg of prompt) {
       if (msg.role === "system") {
         if (typeof msg.content === "string") {
@@ -525,8 +579,7 @@ function extractUserMessage(prompt: any): string {
         }
       }
     }
-    
-    // Find the last user message
+
     for (let i = prompt.length - 1; i >= 0; i--) {
       const msg = prompt[i];
       if (msg.role === "user") {
@@ -543,8 +596,7 @@ function extractUserMessage(prompt: any): string {
         }
       }
     }
-    
-    // Fallback: concatenate all messages
+
     if (!userMessage) {
       userMessage = prompt
         .map((msg: any) => {
@@ -559,11 +611,10 @@ function extractUserMessage(prompt: any): string {
   } else {
     return String(prompt);
   }
-  
-  // Prepend system prompt if found
-  if (systemPrompt) {
+
+  if (systemPrompt && includeSystemPrompt) {
     return `<system_instructions>\n${systemPrompt}\n</system_instructions>\n\n${userMessage}`;
   }
-  
+
   return userMessage;
 }

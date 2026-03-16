@@ -5,9 +5,9 @@ import type { LocalModel } from "../types/language-model";
 
 const logger = log.scope("letta_handler");
 
-// Default path to letta CLI
+// Default path to letta CLI - use absolute path for Electron environment reliability
 export function getLettaPath(): string {
-  return process.env.LETTA_PATH || "letta";
+  return process.env.LETTA_PATH || "/home/raywar/.npm-global/bin/letta";
 }
 
 /**
