@@ -1,7 +1,7 @@
 import { ipcMain } from "electron";
 import log from "electron-log";
 import { execSync } from "node:child_process";
-import type { LocalModelListResponse, LocalModel } from "../ipc_types";
+import type { LocalModel } from "../types/language-model";
 
 const logger = log.scope("letta_handler");
 
@@ -86,7 +86,7 @@ function getLettaModels(): LettaModelInfo[] {
 /**
  * Fetch available models from Letta CLI
  */
-export async function fetchLettaModels(): Promise<LocalModelListResponse> {
+export async function fetchLettaModels(): Promise<{ models: LocalModel[] }> {
   if (!isLettaAvailable()) {
     throw new Error(
       "Letta CLI is not installed or not found in PATH. Install it from: https://github.com/letta-ai/letta-code"
@@ -119,7 +119,7 @@ export async function fetchLettaModels(): Promise<LocalModelListResponse> {
 export function registerLettaHandlers() {
   ipcMain.handle(
     "local-models:list-letta",
-    async (): Promise<LocalModelListResponse> => {
+    async (): Promise<{ models: LocalModel[] }> => {
       return fetchLettaModels();
     }
   );

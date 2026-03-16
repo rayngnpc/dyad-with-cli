@@ -1,7 +1,7 @@
 import { ipcMain } from "electron";
 import log from "electron-log";
 import { spawn, execSync } from "node:child_process";
-import type { LocalModelListResponse, LocalModel } from "../ipc_types";
+import type { LocalModel } from "../types/language-model";
 
 const logger = log.scope("gemini_cli_handler");
 
@@ -74,7 +74,7 @@ type GeminiStreamEvent = GeminiStreamInit | GeminiStreamMessage | GeminiStreamRe
  * Note: Gemini CLI doesn't have a direct "list models" feature,
  * so we return a predefined list of available Gemini models that can be used via CLI
  */
-export async function fetchGeminiCliModels(): Promise<LocalModelListResponse> {
+export async function fetchGeminiCliModels(): Promise<{ models: LocalModel[] }> {
   // First, check if Gemini CLI is available
   if (!isGeminiCliAvailable()) {
     throw new Error(
@@ -244,7 +244,7 @@ export async function streamGeminiCliResponse(
 export function registerGeminiCliHandlers() {
   ipcMain.handle(
     "local-models:list-gemini-cli",
-    async (): Promise<LocalModelListResponse> => {
+    async (): Promise<{ models: LocalModel[] }> => {
       return fetchGeminiCliModels();
     }
   );

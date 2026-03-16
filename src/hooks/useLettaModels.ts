@@ -5,14 +5,12 @@ import {
   lettaModelsLoadingAtom,
   lettaModelsErrorAtom,
 } from "@/atoms/localModelsAtoms";
-import { IpcClient } from "@/ipc/ipc_client";
+import { ipc } from "@/ipc/types";
 
 export function useLettaModels() {
   const [models, setModels] = useAtom(lettaModelsAtom);
   const [loading, setLoading] = useAtom(lettaModelsLoadingAtom);
   const [error, setError] = useAtom(lettaModelsErrorAtom);
-
-  const ipcClient = IpcClient.getInstance();
 
   /**
    * Load local models from Letta CLI
@@ -20,7 +18,7 @@ export function useLettaModels() {
   const loadModels = useCallback(async () => {
     setLoading(true);
     try {
-      const modelList = await ipcClient.listLocalLettaModels();
+      const { models: modelList } = await ipc.languageModel.listLettaModels();
       setModels(modelList);
       setError(null);
 
@@ -32,7 +30,7 @@ export function useLettaModels() {
     } finally {
       setLoading(false);
     }
-  }, [ipcClient, setModels, setError, setLoading]);
+  }, [setModels, setError, setLoading]);
 
   return {
     models,

@@ -5,14 +5,12 @@ import {
   openCodeModelsLoadingAtom,
   openCodeModelsErrorAtom,
 } from "@/atoms/localModelsAtoms";
-import { IpcClient } from "@/ipc/ipc_client";
+import { ipc } from "@/ipc/types";
 
 export function useOpenCodeModels() {
   const [models, setModels] = useAtom(openCodeModelsAtom);
   const [loading, setLoading] = useAtom(openCodeModelsLoadingAtom);
   const [error, setError] = useAtom(openCodeModelsErrorAtom);
-
-  const ipcClient = IpcClient.getInstance();
 
   /**
    * Load local models from OpenCode CLI
@@ -20,7 +18,7 @@ export function useOpenCodeModels() {
   const loadModels = useCallback(async () => {
     setLoading(true);
     try {
-      const modelList = await ipcClient.listLocalOpenCodeModels();
+      const { models: modelList } = await ipc.languageModel.listOpenCodeModels();
       setModels(modelList);
       setError(null);
 
@@ -32,7 +30,7 @@ export function useOpenCodeModels() {
     } finally {
       setLoading(false);
     }
-  }, [ipcClient, setModels, setError, setLoading]);
+  }, [setModels, setError, setLoading]);
 
   return {
     models,

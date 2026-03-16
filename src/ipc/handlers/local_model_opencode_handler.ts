@@ -1,7 +1,7 @@
 import { ipcMain } from "electron";
 import log from "electron-log";
 import { execSync } from "node:child_process";
-import type { LocalModelListResponse, LocalModel } from "../ipc_types";
+import type { LocalModel } from "../types/language-model";
 
 const logger = log.scope("opencode_handler");
 
@@ -88,7 +88,7 @@ function parseOpenCodeModels(output: string): OpenCodeModelInfo[] {
 /**
  * Fetch available models from OpenCode CLI
  */
-export async function fetchOpenCodeModels(): Promise<LocalModelListResponse> {
+export async function fetchOpenCodeModels(): Promise<{ models: LocalModel[] }> {
   if (!isOpenCodeAvailable()) {
     throw new Error(
       "OpenCode CLI is not installed or not found in PATH. Install it from: https://opencode.ai"
@@ -130,7 +130,7 @@ export async function fetchOpenCodeModels(): Promise<LocalModelListResponse> {
 export function registerOpenCodeHandlers() {
   ipcMain.handle(
     "local-models:list-opencode",
-    async (): Promise<LocalModelListResponse> => {
+    async (): Promise<{ models: LocalModel[] }> => {
       return fetchOpenCodeModels();
     }
   );
