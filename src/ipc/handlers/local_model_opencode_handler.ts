@@ -5,9 +5,31 @@ import type { LocalModel } from "../types/language-model";
 
 const logger = log.scope("opencode_handler");
 
-// Default path to opencode CLI - use absolute path for Electron environment reliability
+// Resolve opencode binary path. Electron doesn't inherit the user's full shell
+// PATH, so we try common install locations in order.
 export function getOpenCodePath(): string {
-  return process.env.OPENCODE_PATH || "/home/raywar/bin/opencode";
+  if (process.env.OPENCODE_PATH) return process.env.OPENCODE_PATH;
+  try {
+    const result = execSync("which opencode 2>/dev/null || command -v opencode 2>/dev/null", {
+      encoding: "utf-8",
+      shell: "/bin/bash",
+    }).trim();
+    if (result) return result;
+  } catch {
+    // fall through to common locations
+  }
+  const home = process.env.HOME || "";
+  const candidates = [
+    `${home}/bin/opencode`,
+    `${home}/.npm-global/bin/opencode`,
+    `${home}/.local/bin/opencode`,
+    "/usr/local/bin/opencode",
+    "/usr/bin/opencode",
+  ];
+  for (const p of candidates) {
+    try { execSync(`test -x "${p}"`, { stdio: "ignore" }); return p; } catch { /* try next */ }
+  }
+  return "opencode"; // last resort — let the OS find it
 }
 
 /**

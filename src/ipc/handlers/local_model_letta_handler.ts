@@ -5,9 +5,31 @@ import type { LocalModel } from "../types/language-model";
 
 const logger = log.scope("letta_handler");
 
-// Default path to letta CLI - use absolute path for Electron environment reliability
+// Resolve letta binary path. Electron doesn't inherit the user's full shell
+// PATH, so we try common install locations in order.
 export function getLettaPath(): string {
-  return process.env.LETTA_PATH || "/home/raywar/.npm-global/bin/letta";
+  if (process.env.LETTA_PATH) return process.env.LETTA_PATH;
+  try {
+    const result = execSync("which letta 2>/dev/null || command -v letta 2>/dev/null", {
+      encoding: "utf-8",
+      shell: "/bin/bash",
+    }).trim();
+    if (result) return result;
+  } catch {
+    // fall through to common locations
+  }
+  const home = process.env.HOME || "";
+  const candidates = [
+    `${home}/.npm-global/bin/letta`,
+    `${home}/.local/bin/letta`,
+    `${home}/bin/letta`,
+    "/usr/local/bin/letta",
+    "/usr/bin/letta",
+  ];
+  for (const p of candidates) {
+    try { execSync(`test -x "${p}"`, { stdio: "ignore" }); return p; } catch { /* try next */ }
+  }
+  return "letta"; // last resort — let the OS find it
 }
 
 /**
