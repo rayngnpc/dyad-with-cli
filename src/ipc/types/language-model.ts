@@ -37,7 +37,7 @@ export const LanguageModelSchema = z.object({
 export type LanguageModel = z.infer<typeof LanguageModelSchema>;
 
 export const LocalModelSchema = z.object({
-  provider: z.enum(["ollama", "lmstudio"]),
+  provider: z.enum(["ollama", "lmstudio", "gemini_cli", "opencode", "letta"]),
   modelName: z.string(),
   displayName: z.string(),
 });
@@ -142,6 +142,42 @@ export const languageModelContracts = {
     channel: "local-models:list-lmstudio",
     input: z.void(),
     output: z.object({ models: z.array(LocalModelSchema) }),
+  }),
+
+  listGeminiCliModels: defineContract({
+    channel: "local-models:list-gemini-cli",
+    input: z.void(),
+    output: z.object({ models: z.array(LocalModelSchema) }),
+  }),
+
+  listOpenCodeModels: defineContract({
+    channel: "local-models:list-opencode",
+    input: z.void(),
+    output: z.object({ models: z.array(LocalModelSchema) }),
+  }),
+
+  listLettaModels: defineContract({
+    channel: "local-models:list-letta",
+    input: z.void(),
+    output: z.object({ models: z.array(LocalModelSchema) }),
+  }),
+
+  isOpenCodeAvailable: defineContract({
+    channel: "local-models:opencode-available",
+    input: z.void(),
+    output: z.boolean(),
+  }),
+
+  isGeminiCliAvailable: defineContract({
+    channel: "local-models:gemini-cli-available",
+    input: z.void(),
+    output: z.boolean(),
+  }),
+
+  isLettaAvailable: defineContract({
+    channel: "local-models:letta-available",
+    input: z.void(),
+    output: z.boolean(),
   }),
 } as const;
 

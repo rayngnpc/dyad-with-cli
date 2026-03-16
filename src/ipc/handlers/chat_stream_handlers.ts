@@ -104,6 +104,18 @@ import {
   VersionedFiles,
 } from "../utils/versioned_codebase_context";
 import { getAiMessagesJsonIfWithinLimit } from "../utils/ai_messages_utils";
+import {
+  setOpenCodeWorkingDirectory,
+  setOpenCodeSessionKey,
+} from "../utils/opencode_cli_provider";
+import {
+  setLettaWorkingDirectory,
+  setLettaSessionKey,
+} from "../utils/letta_cli_provider";
+import {
+  setGeminiCliWorkingDirectory,
+  setGeminiCliSessionKey,
+} from "../utils/gemini_cli_provider";
 
 type AsyncIterableStream<T> = AsyncIterable<T> & ReadableStream<T>;
 
@@ -547,6 +559,22 @@ ${componentSnippet}
           await getModelClient(settings.selectedModel, settings);
 
         const appPath = getDyadAppPath(updatedChat.app.path);
+
+        // Set up session persistence for CLI providers
+        // Each chat gets its own independent CLI session (chat-{chatId})
+        const sessionKey = `chat-${updatedChat.id}`;
+        const selectedProvider = settings.selectedModel?.provider;
+        if (selectedProvider === "opencode") {
+          setOpenCodeWorkingDirectory(appPath);
+          setOpenCodeSessionKey(sessionKey);
+        } else if (selectedProvider === "letta") {
+          setLettaWorkingDirectory(appPath);
+          setLettaSessionKey(sessionKey);
+        } else if (selectedProvider === "gemini_cli") {
+          setGeminiCliWorkingDirectory(appPath);
+          setGeminiCliSessionKey(sessionKey);
+        }
+
         // When we don't have smart context enabled, we
         // only include the selected components' files for codebase context.
         //
@@ -1585,17 +1613,26 @@ ${problemReport.problems
 
       // Only save the response and process it if we weren't aborted
       if (!abortController.signal.aborted && fullResponse) {
-        // Scrape from: <dyad-chat-summary>Renaming profile file</dyad-chat-title>
-        const chatTitle = fullResponse.match(
+        const chatTitleMatch = fullResponse.match(
           /<dyad-chat-summary>(.*?)<\/dyad-chat-summary>/,
         );
-        if (chatTitle) {
+
+        let chatSummary: string | undefined;
+        if (chatTitleMatch) {
+          chatSummary = chatTitleMatch[1];
           await db
             .update(chats)
-            .set({ title: chatTitle[1] })
+            .set({ title: chatSummary })
             .where(and(eq(chats.id, req.chatId), isNull(chats.title)));
+        } else if (chat.title === null) {
+          chatSummary = generateTitleFromPrompt(req.prompt);
+          if (chatSummary) {
+            await db
+              .update(chats)
+              .set({ title: chatSummary })
+              .where(and(eq(chats.id, req.chatId), isNull(chats.title)));
+          }
         }
-        const chatSummary = chatTitle?.[1];
 
         // Update the placeholder assistant message with the full response
         await db
@@ -1874,6 +1911,27 @@ export function hasUnclosedDyadWrite(text: string): boolean {
   const hasClosingTag = /<\/dyad-write>/.test(textAfterLastOpen);
 
   return !hasClosingTag;
+}
+
+function generateTitleFromPrompt(prompt: string): string {
+  const maxLength = 60;
+  let cleaned = prompt
+    .replace(/@prompt:\d+/g, "")
+    .replace(/@\w+/g, "")
+    .replace(/\n+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (cleaned.length <= maxLength) {
+    return cleaned || "New Chat";
+  }
+
+  const truncated = cleaned.slice(0, maxLength);
+  const lastSpace = truncated.lastIndexOf(" ");
+  if (lastSpace > maxLength * 0.5) {
+    return truncated.slice(0, lastSpace) + "...";
+  }
+  return truncated + "...";
 }
 
 function escapeDyadTags(text: string): string {

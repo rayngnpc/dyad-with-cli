@@ -1,0 +1,151 @@
+import { ipcMain } from "electron";
+import log from "electron-log";
+import { execSync } from "node:child_process";
+import type { LocalModelListResponse, LocalModel } from "../ipc_types";
+
+const logger = log.scope("opencode_handler");
+
+// Default path to opencode CLI - use absolute path for Electron environment reliability
+export function getOpenCodePath(): string {
+  return process.env.OPENCODE_PATH || "/home/raywar/bin/opencode";
+}
+
+/**
+ * Check if OpenCode CLI is available on the system
+ */
+export function isOpenCodeAvailable(): boolean {
+  try {
+    const opencodePath = getOpenCodePath();
+    logger.info(`Checking OpenCode availability at: ${opencodePath}`);
+    const version = execSync(`${opencodePath} --version`, { encoding: "utf-8", timeout: 10000 });
+    logger.info(`OpenCode available: ${version.trim()}`);
+    return true;
+  } catch (err) {
+    logger.error(`OpenCode not available at ${getOpenCodePath()}: ${err}`);
+    return false;
+  }
+}
+
+/**
+ * Get the version of OpenCode CLI
+ */
+export function getOpenCodeVersion(): string | null {
+  try {
+    const opencodePath = getOpenCodePath();
+    const output = execSync(`${opencodePath} --version`, { encoding: "utf-8" });
+    return output.trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * OpenCode model information with provider grouping
+ */
+interface OpenCodeModelInfo {
+  provider: string;
+  model: string;
+  displayName: string;
+}
+
+/**
+ * Parse model list from opencode models command
+ */
+function parseOpenCodeModels(output: string): OpenCodeModelInfo[] {
+  const models: OpenCodeModelInfo[] = [];
+  const lines = output.split("\n").filter(line => line.trim());
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("opencode/")) {
+      // Skip opencode's built-in/test models
+      continue;
+    }
+    
+    const parts = trimmed.split("/");
+    if (parts.length >= 2) {
+      const provider = parts[0];
+      const model = parts.slice(1).join("/");
+      
+      // Create display name — preserve dots in version numbers (e.g. "4.6" stays "4.6")
+      const displayName = model
+        .replace(/-/g, " ")
+        .split(" ")
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ");
+      
+      models.push({
+        provider,
+        model: trimmed, // Full model ID including provider
+        displayName: `${displayName} (${provider})`,
+      });
+    }
+  }
+  
+  return models;
+}
+
+/**
+ * Fetch available models from OpenCode CLI
+ */
+export async function fetchOpenCodeModels(): Promise<LocalModelListResponse> {
+  if (!isOpenCodeAvailable()) {
+    throw new Error(
+      "OpenCode CLI is not installed or not found in PATH. Install it from: https://opencode.ai"
+    );
+  }
+
+  const version = getOpenCodeVersion();
+  logger.info(`OpenCode CLI detected, version: ${version}`);
+
+  try {
+    const opencodePath = getOpenCodePath();
+    const output = execSync(`${opencodePath} models`, {
+      encoding: "utf-8",
+      timeout: 30000,
+      env: { ...process.env, HOME: process.env.HOME || "" },
+    });
+    
+    const parsedModels = parseOpenCodeModels(output);
+    
+    const localModels: LocalModel[] = parsedModels.map(m => ({
+      modelName: m.model,
+      displayName: m.displayName,
+      provider: "opencode",
+    }));
+
+    logger.info(`Found ${localModels.length} models for OpenCode CLI`);
+    return { models: localModels };
+  } catch (error: any) {
+    logger.error("Failed to fetch OpenCode models:", error?.message || error);
+    logger.error("OpenCode path:", getOpenCodePath());
+    logger.error("PATH env:", process.env.PATH?.substring(0, 200));
+    throw new Error(`Failed to fetch OpenCode models: ${error?.message || "Unknown error"}. Is OpenCode CLI configured?`);
+  }
+}
+
+/**
+ * Register IPC handlers for OpenCode CLI
+ */
+export function registerOpenCodeHandlers() {
+  ipcMain.handle(
+    "local-models:list-opencode",
+    async (): Promise<LocalModelListResponse> => {
+      return fetchOpenCodeModels();
+    }
+  );
+
+  ipcMain.handle(
+    "local-models:opencode-available",
+    async (): Promise<boolean> => {
+      return isOpenCodeAvailable();
+    }
+  );
+
+  ipcMain.handle(
+    "local-models:opencode-version",
+    async (): Promise<string | null> => {
+      return getOpenCodeVersion();
+    }
+  );
+}

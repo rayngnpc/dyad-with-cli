@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import fs from "node:fs";
 import { getDyadAppPath } from "../../paths/paths";
 import path from "node:path";
-import { safeJoin } from "../utils/path_utils";
+import { safeJoin, normalizeToRelativePath } from "../utils/path_utils";
 
 import log from "electron-log";
 import { executeAddDependency } from "./executeAddDependency";
@@ -60,7 +60,7 @@ export async function dryRunSearchReplace({
   const issues: { filePath: string; error: string }[] = [];
   const dyadSearchReplaceTags = getDyadSearchReplaceTags(fullResponse);
   for (const tag of dyadSearchReplaceTags) {
-    const filePath = tag.path;
+    const filePath = normalizeToRelativePath(appPath, tag.path);
     const fullFilePath = safeJoin(appPath, filePath);
     try {
       if (!fs.existsSync(fullFilePath)) {
@@ -249,7 +249,8 @@ export async function processFullResponseActions(
     //////////////////////
 
     // Process all file deletions
-    for (const filePath of dyadDeletePaths) {
+    for (const rawFilePath of dyadDeletePaths) {
+      const filePath = normalizeToRelativePath(appPath, rawFilePath);
       const fullFilePath = safeJoin(appPath, filePath);
 
       // Track if this is a shared module
@@ -296,8 +297,8 @@ export async function processFullResponseActions(
 
     // Process all file renames
     for (const tag of dyadRenameTags) {
-      const fromPath = safeJoin(appPath, tag.from);
-      const toPath = safeJoin(appPath, tag.to);
+      const fromPath = safeJoin(appPath, normalizeToRelativePath(appPath, tag.from));
+      const toPath = safeJoin(appPath, normalizeToRelativePath(appPath, tag.to));
 
       // Track if this involves shared modules
       if (isSharedServerModule(tag.from) || isSharedServerModule(tag.to)) {
@@ -365,7 +366,7 @@ export async function processFullResponseActions(
     // Process all search-replace edits
     const dyadSearchReplaceTags = getDyadSearchReplaceTags(fullResponse);
     for (const tag of dyadSearchReplaceTags) {
-      const filePath = tag.path;
+      const filePath = normalizeToRelativePath(appPath, tag.path);
       const fullFilePath = safeJoin(appPath, filePath);
 
       // Track if this is a shared module
@@ -453,7 +454,7 @@ export async function processFullResponseActions(
 
     // Process all file writes
     for (const tag of dyadWriteTags) {
-      const filePath = tag.path;
+      const filePath = normalizeToRelativePath(appPath, tag.path);
       const content = tag.content;
       const fullFilePath = safeJoin(appPath, filePath);
 
