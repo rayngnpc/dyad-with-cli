@@ -109,6 +109,10 @@ const sessionMap = new Map<string, string>();
 let currentSessionKey: string | undefined;
 let sessionMapLoaded = false;
 
+// Track which sessions have already received the system prompt (in-memory only,
+// resets on Dyad restart which is fine — first message of a new process gets it).
+const sessionSystemPromptSent = new Set<string>();
+
 function getSessionMapPath(): string {
   return path.join(getUserDataPath(), "opencode-sessions.json");
 }
@@ -194,6 +198,7 @@ function storeSessionId(key: string, sessionId: string): void {
  */
 export function clearOpenCodeSession(key: string): void {
   sessionMap.delete(key);
+  sessionSystemPromptSent.delete(key);
   saveSessionMap();
   logger.info(`Cleared OpenCode session for key: ${key}`);
 }
@@ -375,9 +380,11 @@ export function createOpenCodeProvider(
       
       async doGenerate(options): Promise<any> {
         const { prompt, abortSignal } = options;
-        
-        const userMessage = extractUserMessage(prompt);
-        
+
+        // Only send system prompt on first message of a session
+        const sessionAlreadyHasSystemPrompt = !!(currentSessionKey && sessionSystemPromptSent.has(currentSessionKey));
+        const userMessage = extractUserMessage(prompt, !sessionAlreadyHasSystemPrompt);
+
         return new Promise((resolve, reject) => {
           const opencodePath = getOpenCodePath();
           const args: string[] = ["run", "--format", "json"];
@@ -393,6 +400,8 @@ export function createOpenCodeProvider(
               args.push("-s", existingSessionId);
               logger.info(`Continuing OpenCode session: ${existingSessionId}`);
             }
+            // Mark that this session has received the system prompt
+            sessionSystemPromptSent.add(currentSessionKey);
           }
 
           args.push(userMessage);
@@ -462,9 +471,11 @@ export function createOpenCodeProvider(
 
       async doStream(options): Promise<any> {
         const { prompt, abortSignal } = options;
-        
-        const userMessage = extractUserMessage(prompt);
-        
+
+        // Only send system prompt on first message of a session
+        const sessionAlreadyHasSystemPrompt = !!(currentSessionKey && sessionSystemPromptSent.has(currentSessionKey));
+        const userMessage = extractUserMessage(prompt, !sessionAlreadyHasSystemPrompt);
+
         const opencodePath = getOpenCodePath();
         const args = ["run", "--format", "json"];
 
@@ -479,6 +490,8 @@ export function createOpenCodeProvider(
             args.push("-s", existingSessionId);
             logger.info(`Continuing OpenCode session: ${existingSessionId}`);
           }
+          // Mark that this session has received the system prompt
+          sessionSystemPromptSent.add(currentSessionKey);
         }
 
         args.push(userMessage);
@@ -728,18 +741,21 @@ export function createOpenCodeProvider(
 }
 
 /**
- * Extract the user message from a prompt array, including system prompt if present
+ * Extract the user message from a prompt array.
+ * includeSystemPrompt controls whether the system prompt is prepended.
+ * On subsequent turns of the same OpenCode session, omit it — the model
+ * already has it in its session context.
  */
-function extractUserMessage(prompt: any): string {
+function extractUserMessage(prompt: any, includeSystemPrompt: boolean): string {
   let userMessage = "";
   let systemPrompt = "";
-  
+
   if (typeof prompt === "string") {
     return prompt;
   }
-  
+
   if (Array.isArray(prompt)) {
-    // First, extract system prompt if present
+    // Extract system prompt if present
     for (const msg of prompt) {
       if (msg.role === "system") {
         if (typeof msg.content === "string") {
@@ -748,7 +764,7 @@ function extractUserMessage(prompt: any): string {
         }
       }
     }
-    
+
     // Find the last user message
     for (let i = prompt.length - 1; i >= 0; i--) {
       const msg = prompt[i];
@@ -766,7 +782,7 @@ function extractUserMessage(prompt: any): string {
         }
       }
     }
-    
+
     // Fallback: concatenate all messages
     if (!userMessage) {
       userMessage = prompt
@@ -782,9 +798,9 @@ function extractUserMessage(prompt: any): string {
   } else {
     return String(prompt);
   }
-  
-  // Prepend system prompt if found
-  if (systemPrompt) {
+
+  // Prepend system prompt only on first message of this session
+  if (systemPrompt && includeSystemPrompt) {
     return `<system_instructions>\n${systemPrompt}\n</system_instructions>\n\n${userMessage}`;
   }
   
