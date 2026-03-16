@@ -1,5 +1,4 @@
 import path from "node:path";
-import { normalizePath } from "../../../shared/normalizePath";
 
 /**
  * Safely joins paths while ensuring the result stays within the base directory.
@@ -11,12 +10,32 @@ import { normalizePath } from "../../../shared/normalizePath";
  * @returns The joined path if it's within the base directory
  * @throws Error if the resulting path would be outside the base directory
  */
-export function safeJoin(basePath: string, ...paths: string[]): string {
-  // Normalize backslashes to forward slashes for cross-platform consistency
-  const normalizedPaths = paths.map((p) => normalizePath(p));
+/**
+ * If filePath is an absolute path that lives inside basePath, converts it to
+ * a relative path. This handles the case where an AI model outputs a full
+ * absolute path (e.g. "/home/user/app/src/foo.ts") instead of a relative one
+ * ("src/foo.ts"). If filePath is already relative, it is returned unchanged.
+ * If filePath is absolute but outside basePath, it is returned as-is so that
+ * safeJoin can reject it normally.
+ */
+export function normalizeToRelativePath(
+  basePath: string,
+  filePath: string,
+): string {
+  if (!path.isAbsolute(filePath)) {
+    return filePath;
+  }
+  const resolvedBase = path.resolve(basePath);
+  const resolvedFile = path.resolve(filePath);
+  if (resolvedFile.startsWith(resolvedBase + path.sep)) {
+    return path.relative(resolvedBase, resolvedFile);
+  }
+  return filePath;
+}
 
+export function safeJoin(basePath: string, ...paths: string[]): string {
   // Check if any of the path segments are absolute paths (which would be unsafe)
-  for (const pathSegment of normalizedPaths) {
+  for (const pathSegment of paths) {
     if (path.isAbsolute(pathSegment)) {
       throw new Error(
         `Unsafe path: joining "${paths.join(", ")}" with base "${basePath}" would escape the base directory`,
@@ -43,7 +62,7 @@ export function safeJoin(basePath: string, ...paths: string[]): string {
   }
 
   // Join all the paths
-  const joinedPath = path.join(basePath, ...normalizedPaths);
+  const joinedPath = path.join(basePath, ...paths);
 
   // Resolve both paths to absolute paths to handle any ".." components
   const resolvedBasePath = path.resolve(basePath);

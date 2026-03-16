@@ -604,4 +604,16 @@ export const LOCAL_PROVIDERS: Record<
     displayName: "LM Studio",
     hasFreeTier: true,
   },
+  gemini_cli: {
+    displayName: "Gemini CLI",
+    hasFreeTier: true,
+  },
+  opencode: {
+    displayName: "OpenCode",
+    hasFreeTier: true,
+  },
+  letta: {
+    displayName: "Letta",
+    hasFreeTier: true,
+  },
 };

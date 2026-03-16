@@ -14,6 +14,9 @@ import {
 import { useEffect, useState } from "react";
 import { useLocalModels } from "@/hooks/useLocalModels";
 import { useLocalLMSModels } from "@/hooks/useLMStudioModels";
+import { useOpenCodeModels } from "@/hooks/useOpenCodeModels";
+import { useLettaModels } from "@/hooks/useLettaModels";
+import { useGeminiCliModels } from "@/hooks/useGeminiCliModels";
 import { useLanguageModelsByProviders } from "@/hooks/useLanguageModelsByProviders";
 
 import { ipc, LocalModel } from "@/ipc/types";
@@ -63,13 +66,40 @@ export function ModelPicker() {
     loadModels: loadLMStudioModels,
   } = useLocalLMSModels();
 
+  // OpenCode Models Hook
+  const {
+    models: openCodeModels,
+    loading: openCodeLoading,
+    error: openCodeError,
+    loadModels: loadOpenCodeModels,
+  } = useOpenCodeModels();
+
+  // Letta Models Hook
+  const {
+    models: lettaModels,
+    loading: lettaLoading,
+    error: lettaError,
+    loadModels: loadLettaModels,
+  } = useLettaModels();
+
+  // Gemini CLI Models Hook (disabled - ban risk)
+  const {
+    models: geminiCliModels,
+    loading: geminiCliLoading,
+    error: geminiCliError,
+    loadModels: loadGeminiCliModels,
+  } = useGeminiCliModels();
+
   // Load models when the dropdown opens
   useEffect(() => {
     if (open) {
       loadOllamaModels();
       loadLMStudioModels();
+      loadOpenCodeModels();
+      loadLettaModels();
+      loadGeminiCliModels();
     }
-  }, [open, loadOllamaModels, loadLMStudioModels]);
+  }, [open, loadOllamaModels, loadLMStudioModels, loadOpenCodeModels, loadLettaModels, loadGeminiCliModels]);
 
   // Get display name for the selected model
   const getModelDisplayName = () => {
@@ -84,7 +114,21 @@ export function ModelPicker() {
       return (
         lmStudioModels.find(
           (model: LocalModel) => model.modelName === selectedModel.name,
-        )?.displayName || selectedModel.name // Fallback to path if not found
+        )?.displayName || selectedModel.name
+      );
+    }
+    if (selectedModel.provider === "opencode") {
+      return (
+        openCodeModels.find(
+          (model: LocalModel) => model.modelName === selectedModel.name,
+        )?.displayName || selectedModel.name
+      );
+    }
+    if (selectedModel.provider === "letta") {
+      return (
+        lettaModels.find(
+          (model: LocalModel) => model.modelName === selectedModel.name,
+        )?.displayName || selectedModel.name
       );
     }
 
@@ -136,6 +180,12 @@ export function ModelPicker() {
     !ollamaLoading && !ollamaError && ollamaModels.length > 0;
   const hasLMStudioModels =
     !lmStudioLoading && !lmStudioError && lmStudioModels.length > 0;
+  const hasOpenCodeModels =
+    !openCodeLoading && !openCodeError && openCodeModels.length > 0;
+  const hasLettaModels =
+    !lettaLoading && !lettaError && lettaModels.length > 0;
+  const hasGeminiCliModels =
+    !geminiCliLoading && !geminiCliError && geminiCliModels.length > 0;
 
   if (!settings) {
     return null;
@@ -463,7 +513,7 @@ export function ModelPicker() {
                 <div className="flex flex-col items-start">
                   <span>Local models</span>
                   <span className="text-xs text-muted-foreground">
-                    LM Studio, Ollama
+                    Ollama, LM Studio, OpenCode, Letta
                   </span>
                 </div>
               </DropdownMenuSubTrigger>
@@ -636,6 +686,148 @@ export function ModelPicker() {
                     )}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
+
+                {/* OpenCode Models SubMenu */}
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger
+                    disabled={openCodeLoading && !hasOpenCodeModels}
+                    className="w-full font-normal"
+                  >
+                    <div className="flex flex-col items-start">
+                      <span>OpenCode</span>
+                      {openCodeLoading ? (
+                        <span className="text-xs text-muted-foreground">Loading...</span>
+                      ) : openCodeError ? (
+                        <span className="text-xs text-red-500">Error loading</span>
+                      ) : !hasOpenCodeModels ? (
+                        <span className="text-xs text-muted-foreground">None available</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">{openCodeModels.length} models</span>
+                      )}
+                    </div>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-56 max-h-100 overflow-y-auto">
+                    <DropdownMenuLabel>OpenCode Models</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {openCodeLoading && openCodeModels.length === 0 ? (
+                      <div className="text-xs text-center py-2 text-muted-foreground">Loading models...</div>
+                    ) : openCodeError ? (
+                      <div className="px-2 py-1.5 text-sm text-red-600">
+                        <div className="flex flex-col">
+                          <span>Error loading models</span>
+                          <span className="text-xs text-muted-foreground">Is OpenCode installed?</span>
+                        </div>
+                      </div>
+                    ) : !hasOpenCodeModels ? (
+                      <div className="px-2 py-1.5 text-sm">
+                        <div className="flex flex-col">
+                          <span>No models found</span>
+                          <span className="text-xs text-muted-foreground">Ensure OpenCode is installed and configured.</span>
+                        </div>
+                      </div>
+                    ) : (
+                      openCodeModels.map((model: LocalModel) => (
+                        <DropdownMenuItem
+                          key={`opencode-${model.modelName}`}
+                          className={
+                            selectedModel.provider === "opencode" &&
+                            selectedModel.name === model.modelName
+                              ? "bg-secondary"
+                              : ""
+                          }
+                          onClick={() => {
+                            onModelSelect({ name: model.modelName, provider: "opencode" });
+                            setOpen(false);
+                          }}
+                        >
+                          <div className="flex flex-col">
+                            <span>{model.displayName}</span>
+                            <span className="text-xs text-muted-foreground truncate">{model.modelName}</span>
+                          </div>
+                        </DropdownMenuItem>
+                      ))
+                    )}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+
+                {/* Letta Models SubMenu */}
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger
+                    disabled={lettaLoading && !hasLettaModels}
+                    className="w-full font-normal"
+                  >
+                    <div className="flex flex-col items-start">
+                      <span>Letta</span>
+                      {lettaLoading ? (
+                        <span className="text-xs text-muted-foreground">Loading...</span>
+                      ) : lettaError ? (
+                        <span className="text-xs text-red-500">Error loading</span>
+                      ) : !hasLettaModels ? (
+                        <span className="text-xs text-muted-foreground">None available</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">{lettaModels.length} models</span>
+                      )}
+                    </div>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-56 max-h-100 overflow-y-auto">
+                    <DropdownMenuLabel>Letta Models</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {lettaLoading && lettaModels.length === 0 ? (
+                      <div className="text-xs text-center py-2 text-muted-foreground">Loading models...</div>
+                    ) : lettaError ? (
+                      <div className="px-2 py-1.5 text-sm text-red-600">
+                        <div className="flex flex-col">
+                          <span>Error loading models</span>
+                          <span className="text-xs text-muted-foreground">Is Letta running?</span>
+                        </div>
+                      </div>
+                    ) : !hasLettaModels ? (
+                      <div className="px-2 py-1.5 text-sm">
+                        <div className="flex flex-col">
+                          <span>No models found</span>
+                          <span className="text-xs text-muted-foreground">Ensure Letta is installed and running.</span>
+                        </div>
+                      </div>
+                    ) : (
+                      lettaModels.map((model: LocalModel) => (
+                        <DropdownMenuItem
+                          key={`letta-${model.modelName}`}
+                          className={
+                            selectedModel.provider === "letta" &&
+                            selectedModel.name === model.modelName
+                              ? "bg-secondary"
+                              : ""
+                          }
+                          onClick={() => {
+                            onModelSelect({ name: model.modelName, provider: "letta" });
+                            setOpen(false);
+                          }}
+                        >
+                          <div className="flex flex-col">
+                            <span>{model.displayName}</span>
+                            <span className="text-xs text-muted-foreground truncate">{model.modelName}</span>
+                          </div>
+                        </DropdownMenuItem>
+                      ))
+                    )}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+
+                {/* Gemini CLI — disabled due to Google account ban risk */}
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger disabled className="w-full font-normal opacity-50 cursor-not-allowed">
+                    <div className="flex flex-col items-start">
+                      <span>Gemini CLI</span>
+                      <span className="text-xs text-muted-foreground">Disabled — ban risk</span>
+                    </div>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-56">
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                      Gemini CLI is disabled. Automated use risks Google account ban.
+                    </div>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+
               </DropdownMenuSubContent>
             </DropdownMenuSub>
           </>
