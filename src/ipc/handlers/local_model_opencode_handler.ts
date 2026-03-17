@@ -79,10 +79,7 @@ function parseOpenCodeModels(output: string): OpenCodeModelInfo[] {
   
   for (const line of lines) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("opencode/")) {
-      // Skip opencode's built-in/test models
-      continue;
-    }
+    if (!trimmed) continue;
     
     const parts = trimmed.split("/");
     if (parts.length >= 2) {
