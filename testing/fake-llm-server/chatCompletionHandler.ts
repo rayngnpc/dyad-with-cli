@@ -59,7 +59,8 @@ export const createChatCompletionHandler =
     if (
       !localAgentFixture &&
       (userTextContent.includes("incomplete todo(s)") ||
-        userTextContent.includes("previous response stream was interrupted"))
+        userTextContent.includes("previous response stream was interrupted") ||
+        userTextContent.includes("did not finish completely"))
     ) {
       for (const msg of userMessages) {
         const textContent = getTextContent(msg);
@@ -334,11 +335,13 @@ export default Index;
       }
     }
 
+    // Continuation requests: the partial assistant output is in a preceding assistant
+    // message, then a user message asks to continue ("did not finish completely").
+    // Check any message for the marker. See chat_stream_handlers continuation prompt.
     if (
-      lastMessage &&
-      lastMessage.content &&
-      typeof lastMessage.content === "string" &&
-      lastMessage.content.trim().endsWith("[[STRING_TO_BE_FINISHED]]")
+      messages.some((m: any) =>
+        getTextContent(m).includes("[[STRING_TO_BE_FINISHED]]"),
+      )
     ) {
       messageContent = `[[STRING_IS_FINISHED]]";</dyad-write>\nFinished writing file.`;
       messageContent += "\n\n" + generateDump(req);

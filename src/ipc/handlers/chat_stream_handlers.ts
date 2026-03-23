@@ -1453,10 +1453,18 @@ ${formattedSearchReplaceIssues}`,
               continuationAttempts++;
 
               const { fullStream: contStream } = await simpleStreamText({
-                // Build messages: replay history then pre-fill assistant with current partial.
+                // Build messages: replay history, then ask the model to continue from the partial response.
                 chatMessages: [
                   ...chatMessages,
-                  { role: "assistant", content: fullResponse },
+                  {
+                    role: "assistant",
+                    content: fullResponse,
+                  },
+                  {
+                    role: "user",
+                    content:
+                      "Your previous response did not finish completely. Continue exactly where you left off without any preamble.",
+                  },
                 ],
                 modelClient,
                 files: files,
