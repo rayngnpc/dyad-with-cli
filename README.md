@@ -51,8 +51,8 @@ Uses [Letta](https://docs.letta.com) — stateful agents with persistent memory 
 **Requirements:** Node.js 20+, Git
 
 ```bash
-git clone https://github.com/rayngnpc/dyad-with-opencode.git
-cd dyad-with-opencode
+git clone https://github.com/rayngnpc/dyad-with-cli.git
+cd dyad-with-cli
 ./setup.sh
 npm start
 ```
@@ -62,8 +62,8 @@ The setup script handles `npm install`, database setup, and native module rebuil
 ### Manual Setup
 
 ```bash
-git clone https://github.com/rayngnpc/dyad-with-opencode.git
-cd dyad-with-opencode
+git clone https://github.com/rayngnpc/dyad-with-cli.git
+cd dyad-with-cli
 npm install
 npm rebuild better-sqlite3
 mkdir -p userData
@@ -152,7 +152,7 @@ Everything from the original Dyad is preserved:
 
 ## Community
 
-- Issues: [github.com/rayngnpc/dyad-with-opencode/issues](https://github.com/rayngnpc/dyad-with-opencode/issues)
+- Issues: [github.com/rayngnpc/dyad-with-cli/issues](https://github.com/rayngnpc/dyad-with-cli/issues)
 - Original Dyad community: [r/dyadbuilders](https://www.reddit.com/r/dyadbuilders/)
 
 ## License
