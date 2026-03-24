@@ -1,10 +1,14 @@
 import { spawn } from "node:child_process";
-import fs from "node:fs";
-import path from "node:path";
 import type { LanguageModelV2 } from "@ai-sdk/provider";
 import log from "electron-log";
-import { getLettaPath, isLettaAvailable } from "../handlers/local_model_letta_handler";
-import { getUserDataPath } from "../../paths/paths";
+import {
+  getLettaPath,
+  isLettaAvailable,
+} from "../handlers/local_model_letta_handler";
+import {
+  buildCliProjectContext,
+  extractCliUserMessage,
+} from "./cli_context";
 
 const logger = log.scope("letta_cli_provider");
 
@@ -28,7 +32,13 @@ interface LettaInitEvent {
 interface LettaMessageEvent {
   type: "message";
   id?: string;
-  message_type: "reasoning_message" | "assistant_message" | "tool_call" | "tool_return" | "stop_reason" | "usage_statistics";
+  message_type:
+    | "reasoning_message"
+    | "assistant_message"
+    | "tool_call"
+    | "tool_return"
+    | "stop_reason"
+    | "usage_statistics";
   content?: string;
   reasoning?: string;
   stop_reason?: string;
@@ -60,50 +70,9 @@ type LettaStreamEvent = LettaInitEvent | LettaMessageEvent | LettaResultEvent;
 // Module-level state for the current working directory
 let currentWorkingDirectory: string | undefined;
 
-// Session management - persisted to disk so sessions survive Dyad restarts
+// Session management - map of appId/chatId to Letta agent ID
 const sessionMap = new Map<string, string>();
 let currentSessionKey: string | undefined;
-let sessionMapLoaded = false;
-
-// Track which sessions have already received the system prompt
-const sessionSystemPromptSent = new Set<string>();
-
-function getSessionMapPath(): string {
-  return path.join(getUserDataPath(), "letta-sessions.json");
-}
-
-function loadSessionMap(): void {
-  if (sessionMapLoaded) return;
-  sessionMapLoaded = true;
-  try {
-    const filePath = getSessionMapPath();
-    if (fs.existsSync(filePath)) {
-      const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-      if (data && typeof data === "object") {
-        for (const [key, value] of Object.entries(data)) {
-          if (typeof value === "string") sessionMap.set(key, value);
-        }
-        logger.info(`Loaded ${sessionMap.size} Letta sessions from disk`);
-      }
-    }
-  } catch (err) {
-    logger.warn(`Failed to load Letta session map from disk: ${err}`);
-  }
-}
-
-function saveSessionMap(): void {
-  try {
-    const filePath = getSessionMapPath();
-    const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const data: Record<string, string> = {};
-    for (const [key, value] of sessionMap.entries()) data[key] = value;
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
-    logger.debug(`Saved ${sessionMap.size} Letta sessions to disk`);
-  } catch (err) {
-    logger.warn(`Failed to save Letta session map to disk: ${err}`);
-  }
-}
 
 /**
  * Set the working directory for Letta CLI operations
@@ -117,11 +86,11 @@ export function setLettaWorkingDirectory(cwd: string | undefined): void {
 
 /**
  * Set the session key for the current chat (used to persist sessions)
+ * The key should be unique per app/chat combination (e.g., "appId-chatId")
  */
 export function setLettaSessionKey(key: string | undefined): void {
   currentSessionKey = key;
   if (key) {
-    loadSessionMap();
     logger.info(`Letta session key set to: ${key}`);
   }
 }
@@ -130,7 +99,6 @@ export function setLettaSessionKey(key: string | undefined): void {
  * Get the stored agent ID for a given key
  */
 export function getLettaSessionId(key: string): string | undefined {
-  loadSessionMap();
   return sessionMap.get(key);
 }
 
@@ -139,7 +107,6 @@ export function getLettaSessionId(key: string): string | undefined {
  */
 function storeSessionId(key: string, agentId: string): void {
   sessionMap.set(key, agentId);
-  saveSessionMap();
   logger.info(`Stored Letta agent ID: ${agentId} for key: ${key}`);
 }
 
@@ -148,8 +115,6 @@ function storeSessionId(key: string, agentId: string): void {
  */
 export function clearLettaSession(key: string): void {
   sessionMap.delete(key);
-  sessionSystemPromptSent.delete(key);
-  saveSessionMap();
   logger.info(`Cleared Letta session for key: ${key}`);
 }
 
@@ -175,11 +140,11 @@ function formatToolOutput(output: string | undefined, maxLength = 500): string {
  * Creates a Letta CLI provider that implements the LanguageModelV2 interface
  */
 export function createLettaProvider(
-  options?: LettaProviderOptions
+  options?: LettaProviderOptions,
 ): LettaProvider {
   if (!isLettaAvailable()) {
     throw new Error(
-      "Letta CLI is not installed. Install it from: https://github.com/letta-ai/letta-code"
+      "Letta CLI is not installed. Install it from: https://github.com/letta-ai/letta-code",
     );
   }
 
@@ -191,12 +156,17 @@ export function createLettaProvider(
       provider: "letta",
       modelId: effectiveModel || "auto",
       supportedUrls: {},
-      
+
       async doGenerate(options): Promise<any> {
         const { prompt, abortSignal } = options;
 
-        const sessionAlreadyHasSystemPrompt = !!(currentSessionKey && sessionSystemPromptSent.has(currentSessionKey));
-        const userMessage = extractUserMessage(prompt, !sessionAlreadyHasSystemPrompt);
+        // Strip Dyad's system prompt, inject project context
+        const cwd = currentWorkingDirectory || process.cwd();
+        const projectContext = buildCliProjectContext(cwd);
+        const rawMessage = extractCliUserMessage(prompt);
+        const userMessage = projectContext
+          ? `${projectContext}\n\n${rawMessage}`
+          : rawMessage;
 
         return new Promise((resolve, reject) => {
           const lettaPath = getLettaPath();
@@ -211,12 +181,15 @@ export function createLettaProvider(
             const existingAgentId = sessionMap.get(currentSessionKey);
             if (existingAgentId) {
               args.push("-a", existingAgentId);
-              logger.info(`Continuing Letta session with agent: ${existingAgentId}`);
+              logger.info(
+                `Continuing Letta session with agent: ${existingAgentId}`,
+              );
             }
-            sessionSystemPromptSent.add(currentSessionKey);
           }
 
-          logger.info(`Letta CLI doGenerate with model: ${effectiveModel}, cwd: ${currentWorkingDirectory || process.cwd()}`);
+          logger.info(
+            `Letta CLI doGenerate with model: ${effectiveModel}, cwd: ${currentWorkingDirectory || process.cwd()}`,
+          );
 
           const lettaProcess = spawn(lettaPath, args, {
             stdio: ["ignore", "pipe", "pipe"],
@@ -279,8 +252,13 @@ export function createLettaProvider(
       async doStream(options): Promise<any> {
         const { prompt, abortSignal } = options;
 
-        const sessionAlreadyHasSystemPrompt = !!(currentSessionKey && sessionSystemPromptSent.has(currentSessionKey));
-        const userMessage = extractUserMessage(prompt, !sessionAlreadyHasSystemPrompt);
+        // Strip Dyad's system prompt, inject project context
+        const cwd = currentWorkingDirectory || process.cwd();
+        const projectContext = buildCliProjectContext(cwd);
+        const rawMessage = extractCliUserMessage(prompt);
+        const userMessage = projectContext
+          ? `${projectContext}\n\n${rawMessage}`
+          : rawMessage;
 
         const lettaPath = getLettaPath();
         const args = ["-p", userMessage, "--output-format", "stream-json"];
@@ -294,12 +272,15 @@ export function createLettaProvider(
           const existingAgentId = sessionMap.get(currentSessionKey);
           if (existingAgentId) {
             args.push("-a", existingAgentId);
-            logger.info(`Continuing Letta session with agent: ${existingAgentId}`);
+            logger.info(
+              `Continuing Letta session with agent: ${existingAgentId}`,
+            );
           }
-          sessionSystemPromptSent.add(currentSessionKey);
         }
 
-        logger.info(`Letta CLI doStream with model: ${effectiveModel}, cwd: ${currentWorkingDirectory || process.cwd()}`);
+        logger.info(
+          `Letta CLI doStream with model: ${effectiveModel}, cwd: ${currentWorkingDirectory || process.cwd()}`,
+        );
 
         const lettaProcess = spawn(lettaPath, args, {
           stdio: ["ignore", "pipe", "pipe"],
@@ -319,15 +300,27 @@ export function createLettaProvider(
         let totalInputTokens = 0;
         let totalOutputTokens = 0;
         let stderrBuffer = "";
-        
+
         // Track active tools for status updates
         const activeTools = new Map<string, string>();
 
         const stream = new ReadableStream({
           start(controller) {
+            // Send "Thinking..." indicator immediately so user sees activity
+            controller.enqueue({
+              type: "text-start",
+              id: textId,
+            });
+            textStartSent = true;
+            controller.enqueue({
+              type: "text-delta",
+              id: textId,
+              delta: "*Thinking...*\n\n",
+            });
+
             lettaProcess.stdout.on("data", (data: Buffer) => {
               buffer += data.toString();
-              
+
               const lines = buffer.split("\n");
               buffer = lines.pop() || "";
 
@@ -337,7 +330,7 @@ export function createLettaProvider(
 
                 try {
                   const event = JSON.parse(trimmedLine) as LettaStreamEvent;
-                  
+
                   // Handle init event - store agent ID
                   if (event.type === "init") {
                     if (currentSessionKey && event.agent_id) {
@@ -346,13 +339,18 @@ export function createLettaProvider(
                         storeSessionId(currentSessionKey, event.agent_id);
                       }
                     }
-                    logger.info(`Letta agent initialized: ${event.agent_id}, model: ${event.model}`);
+                    logger.info(
+                      `Letta agent initialized: ${event.agent_id}, model: ${event.model}`,
+                    );
                   }
-                  
+
                   // Handle message events
                   if (event.type === "message") {
                     // Assistant message - the actual response text
-                    if (event.message_type === "assistant_message" && event.content) {
+                    if (
+                      event.message_type === "assistant_message" &&
+                      event.content
+                    ) {
                       if (!textStartSent) {
                         controller.enqueue({
                           type: "text-start",
@@ -366,12 +364,12 @@ export function createLettaProvider(
                         delta: event.content,
                       });
                     }
-                    
+
                     // Tool call - show what tool is being used
                     if (event.message_type === "tool_call" && event.tool_call) {
                       const toolName = event.tool_call.name;
                       const callId = event.id || toolName;
-                      
+
                       if (!textStartSent) {
                         controller.enqueue({
                           type: "text-start",
@@ -379,19 +377,26 @@ export function createLettaProvider(
                         });
                         textStartSent = true;
                       }
-                      
+
                       if (!activeTools.has(callId)) {
                         activeTools.set(callId, toolName);
                         let toolMessage = `\n\n---\n**Tool: ${toolName}**\n`;
-                        
+
                         // Show arguments if available
-                        if (event.tool_call.arguments && Object.keys(event.tool_call.arguments).length > 0) {
-                          const argsStr = JSON.stringify(event.tool_call.arguments, null, 2);
+                        if (
+                          event.tool_call.arguments &&
+                          Object.keys(event.tool_call.arguments).length > 0
+                        ) {
+                          const argsStr = JSON.stringify(
+                            event.tool_call.arguments,
+                            null,
+                            2,
+                          );
                           if (argsStr.length < 500) {
                             toolMessage += `\`\`\`json\n${argsStr}\n\`\`\`\n`;
                           }
                         }
-                        
+
                         controller.enqueue({
                           type: "text-delta",
                           id: textId,
@@ -399,9 +404,12 @@ export function createLettaProvider(
                         });
                       }
                     }
-                    
+
                     // Tool return - show result
-                    if (event.message_type === "tool_return" && event.tool_return !== undefined) {
+                    if (
+                      event.message_type === "tool_return" &&
+                      event.tool_return !== undefined
+                    ) {
                       if (!textStartSent) {
                         controller.enqueue({
                           type: "text-start",
@@ -409,22 +417,25 @@ export function createLettaProvider(
                         });
                         textStartSent = true;
                       }
-                      
-                      const formattedOutput = formatToolOutput(event.tool_return, 1000);
+
+                      const formattedOutput = formatToolOutput(
+                        event.tool_return,
+                        1000,
+                      );
                       controller.enqueue({
                         type: "text-delta",
                         id: textId,
                         delta: `\`\`\`\n${formattedOutput}\n\`\`\`\n---\n\n`,
                       });
                     }
-                    
+
                     // Usage statistics
                     if (event.message_type === "usage_statistics") {
                       totalInputTokens = event.prompt_tokens || 0;
                       totalOutputTokens = event.completion_tokens || 0;
                     }
                   }
-                  
+
                   // Handle result event - final response
                   if (event.type === "result") {
                     // Store agent ID from result
@@ -434,13 +445,15 @@ export function createLettaProvider(
                         storeSessionId(currentSessionKey, event.agent_id);
                       }
                     }
-                    
+
                     // Update usage from result if available
                     if (event.usage) {
-                      totalInputTokens = event.usage.prompt_tokens || totalInputTokens;
-                      totalOutputTokens = event.usage.completion_tokens || totalOutputTokens;
+                      totalInputTokens =
+                        event.usage.prompt_tokens || totalInputTokens;
+                      totalOutputTokens =
+                        event.usage.completion_tokens || totalOutputTokens;
                     }
-                    
+
                     // Send the final result if we haven't streamed content yet
                     if (!textStartSent && event.result) {
                       controller.enqueue({
@@ -454,7 +467,7 @@ export function createLettaProvider(
                         delta: event.result,
                       });
                     }
-                    
+
                     // Close the stream
                     if (textStartSent) {
                       controller.enqueue({
@@ -476,7 +489,9 @@ export function createLettaProvider(
                     }
                   }
                 } catch {
-                  logger.debug(`Non-JSON from Letta CLI: ${trimmedLine.slice(0, 100)}`);
+                  logger.debug(
+                    `Non-JSON from Letta CLI: ${trimmedLine.slice(0, 100)}`,
+                  );
                 }
               }
             });
@@ -485,9 +500,12 @@ export function createLettaProvider(
               const text = data.toString();
               stderrBuffer += text;
               logger.warn(`Letta CLI stderr: ${text}`);
-              
+
               // Check for authentication errors
-              if (text.includes("Missing LETTA_API_KEY") || text.includes("authenticate")) {
+              if (
+                text.includes("Missing LETTA_API_KEY") ||
+                text.includes("authenticate")
+              ) {
                 if (!textStartSent) {
                   controller.enqueue({
                     type: "text-start",
@@ -498,7 +516,8 @@ export function createLettaProvider(
                 controller.enqueue({
                   type: "text-delta",
                   id: textId,
-                  delta: "**Letta CLI Error:** Authentication required.\n\nPlease run `letta` in your terminal to authenticate via Letta Cloud OAuth, or set the `LETTA_API_KEY` environment variable.\n",
+                  delta:
+                    "**Letta CLI Error:** Authentication required.\n\nPlease run `letta` in your terminal to authenticate via Letta Cloud OAuth, or set the `LETTA_API_KEY` environment variable.\n",
                 });
               }
             });
@@ -516,14 +535,16 @@ export function createLettaProvider(
                 try {
                   const event = JSON.parse(buffer.trim()) as LettaStreamEvent;
                   if (event.type === "result" && event.usage) {
-                    totalInputTokens = event.usage.prompt_tokens || totalInputTokens;
-                    totalOutputTokens = event.usage.completion_tokens || totalOutputTokens;
+                    totalInputTokens =
+                      event.usage.prompt_tokens || totalInputTokens;
+                    totalOutputTokens =
+                      event.usage.completion_tokens || totalOutputTokens;
                   }
                 } catch {
                   // Ignore
                 }
               }
-              
+
               if (!streamClosed) {
                 if (textStartSent) {
                   controller.enqueue({
@@ -556,65 +577,6 @@ export function createLettaProvider(
   };
 }
 
-/**
- * Extract the user message from a prompt array.
- * includeSystemPrompt controls whether the system prompt is prepended.
- * On subsequent turns of the same Letta session, omit it — the agent
- * already has it in its memory.
- */
-function extractUserMessage(prompt: any, includeSystemPrompt: boolean): string {
-  let userMessage = "";
-  let systemPrompt = "";
-
-  if (typeof prompt === "string") {
-    return prompt;
-  }
-
-  if (Array.isArray(prompt)) {
-    for (const msg of prompt) {
-      if (msg.role === "system") {
-        if (typeof msg.content === "string") {
-          systemPrompt = msg.content;
-          break;
-        }
-      }
-    }
-
-    for (let i = prompt.length - 1; i >= 0; i--) {
-      const msg = prompt[i];
-      if (msg.role === "user") {
-        if (typeof msg.content === "string") {
-          userMessage = msg.content;
-          break;
-        }
-        if (Array.isArray(msg.content)) {
-          userMessage = msg.content
-            .filter((part: any) => part.type === "text")
-            .map((part: any) => part.text)
-            .join("\n");
-          break;
-        }
-      }
-    }
-
-    if (!userMessage) {
-      userMessage = prompt
-        .map((msg: any) => {
-          if (typeof msg.content === "string") {
-            return `${msg.role}: ${msg.content}`;
-          }
-          return "";
-        })
-        .filter(Boolean)
-        .join("\n");
-    }
-  } else {
-    return String(prompt);
-  }
-
-  if (systemPrompt && includeSystemPrompt) {
-    return `<system_instructions>\n${systemPrompt}\n</system_instructions>\n\n${userMessage}`;
-  }
-
-  return userMessage;
-}
+// extractUserMessage removed — using shared extractCliUserMessage from cli_context.ts
+// which strips Dyad's system prompt (conflicting <dyad-write> tag instructions)
+// and lets the CLI use its own system prompt and tools.

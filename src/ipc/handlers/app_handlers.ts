@@ -126,7 +126,10 @@ function buildSnippetFromMatch({
 
 function getDefaultCommand(appId: number): string {
   const port = getAppPort(appId);
-  return `(pnpm install && pnpm run dev --port ${port}) || (npm install --legacy-peer-deps && npm run dev -- --port ${port})`;
+  // --webpack: Disable Turbopack (Next.js 15.3+). Turbopack + Tailwind v4
+  // causes unbounded memory growth during compilation (Next.js issue #91396).
+  // The flag is silently ignored by non-Next.js dev servers.
+  return `(pnpm install && pnpm run dev --port ${port} --webpack) || (npm install --legacy-peer-deps && npm run dev -- --port ${port} --webpack)`;
 }
 async function copyDir(
   source: string,
@@ -210,9 +213,33 @@ async function executeAppLocalNode({
   startCommand?: string | null;
 }): Promise<void> {
   const command = getCommand({ appId, installCommand, startCommand });
-  const spawnedProcess = spawn(command, [], {
+  const escapedAppPath = appPath.replace(/"/g, '\\"');
+  const commandWithExplicitCwd = `cd "${escapedAppPath}" && ${command}`;
+  const spawnedProcess = spawn(commandWithExplicitCwd, [], {
     cwd: appPath,
     shell: true,
+    env: {
+      ...process.env,
+      // Tailwind v4 + @tailwindcss/postcss uses enhanced-resolve to find the
+      // "tailwindcss" package.  enhanced-resolve walks up from its *context*
+      // directory (which can be the parent dyad-apps/ dir, not the project dir)
+      // looking for node_modules/.  If the parent has no node_modules the
+      // resolution fails and retries in a loop, leaking memory.
+      //
+      // Setting NODE_PATH to the project's own node_modules gives
+      // enhanced-resolve a reliable fallback regardless of its context dir.
+      NODE_PATH: path.join(appPath, "node_modules"),
+      // Force PWD and INIT_CWD to the app directory. Some resolvers (enhanced-resolve,
+      // PostCSS plugins) use these env vars instead of process.cwd(), causing module
+      // resolution to fail when they inherit the wrong directory from the parent process.
+      PWD: appPath,
+      INIT_CWD: appPath,
+      // Cap child process heap at 4 GB to prevent runaway compilation
+      // (e.g. Turbopack + Tailwind v4) from OOM-killing the host system.
+      NODE_OPTIONS: [process.env.NODE_OPTIONS, "--max-old-space-size=4096"]
+        .filter(Boolean)
+        .join(" "),
+    },
     stdio: "pipe", // Ensure stdio is piped so we can capture output/errors and detect close
     detached: false, // Ensure child process is attached to the main process lifecycle unless explicitly backgrounded
   });
@@ -247,7 +274,7 @@ async function executeAppLocalNode({
       .join(", ");
 
     logger.error(
-      `Failed to spawn process for app ${appId}. Command="${command}", CWD="${appPath}", ${details}\nSTDERR:\n${
+      `Failed to spawn process for app ${appId}. Command="${commandWithExplicitCwd}", CWD="${appPath}", ${details}\nSTDERR:\n${
         errorOutput || "(empty)"
       }`,
     );

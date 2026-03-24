@@ -1,13 +1,46 @@
+import { execSync, spawn } from "node:child_process";
 import { ipcMain } from "electron";
 import log from "electron-log";
-import { spawn, execSync } from "node:child_process";
-import type { LocalModel } from "../types/language-model";
+import type { LocalModel, LocalModelListResponse } from "../ipc_types";
 
 const logger = log.scope("gemini_cli_handler");
 
 // Default path to gemini CLI - can be overridden with GEMINI_CLI_PATH env var
 export function getGeminiCliPath(): string {
-  return process.env.GEMINI_CLI_PATH || "gemini";
+  if (process.env.GEMINI_CLI_PATH) return process.env.GEMINI_CLI_PATH;
+
+  try {
+    const resolved = execSync(
+      "which gemini 2>/dev/null || command -v gemini 2>/dev/null",
+      {
+        encoding: "utf-8",
+        shell: "/bin/bash",
+      },
+    ).trim();
+    if (resolved) return resolved;
+  } catch {
+    // Fall through to common local paths.
+  }
+
+  const home = process.env.HOME || "";
+  const candidates = [
+    `${home}/bin/gemini`,
+    `${home}/.npm-global/bin/gemini`,
+    `${home}/.local/bin/gemini`,
+    "/usr/local/bin/gemini",
+    "/usr/bin/gemini",
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      execSync(`test -x "${candidate}"`, { stdio: "ignore" });
+      return candidate;
+    } catch {
+      // try next
+    }
+  }
+
+  return "gemini";
 }
 
 /**
@@ -67,32 +100,66 @@ interface GeminiStreamResult {
   };
 }
 
-type GeminiStreamEvent = GeminiStreamInit | GeminiStreamMessage | GeminiStreamResult;
+type GeminiStreamEvent =
+  | GeminiStreamInit
+  | GeminiStreamMessage
+  | GeminiStreamResult;
 
 /**
  * Fetch available models from Gemini CLI
  * Note: Gemini CLI doesn't have a direct "list models" feature,
  * so we return a predefined list of available Gemini models that can be used via CLI
  */
-export async function fetchGeminiCliModels(): Promise<{ models: LocalModel[] }> {
+export async function fetchGeminiCliModels(): Promise<LocalModelListResponse> {
   // First, check if Gemini CLI is available
   if (!isGeminiCliAvailable()) {
     throw new Error(
-      "Gemini CLI is not installed or not found in PATH. Install it from: https://github.com/google-gemini/gemini-cli"
+      "Gemini CLI is not installed or not found in PATH. Install it from: https://github.com/google-gemini/gemini-cli",
     );
   }
 
   const version = getGeminiCliVersion();
   logger.info(`Gemini CLI detected, version: ${version}`);
 
-  // Gemini CLI supports these models through the --model flag
-  // Based on the CLI's model selection menu
+  // Mirror Gemini CLI selector modes + explicit model selection.
+  // Notes:
+  // - "Auto (Gemini 3)" maps to default headless behavior (no explicit --model).
+  // - "Manual" is represented as a Dyad option; in headless mode we fall back to default routing.
+  // - Specific models pass --model <name> to gemini CLI for explicit selection.
   const geminiModels: LocalModel[] = [
+    // Auto modes
     {
-      modelName: "gemini-3-pro-preview",
-      displayName: "Gemini 3 Pro Preview",
+      modelName: "auto",
+      displayName: "Auto (Gemini 3)",
       provider: "gemini_cli",
     },
+    {
+      modelName: "auto-2.5",
+      displayName: "Auto (Gemini 2.5)",
+      provider: "gemini_cli",
+    },
+    {
+      modelName: "manual",
+      displayName: "Manual",
+      provider: "gemini_cli",
+    },
+    // Gemini 3.x series
+    {
+      modelName: "gemini-3.1-pro-preview",
+      displayName: "Gemini 3.1 Pro (Preview)",
+      provider: "gemini_cli",
+    },
+    {
+      modelName: "gemini-3-flash-preview",
+      displayName: "Gemini 3 Flash (Preview)",
+      provider: "gemini_cli",
+    },
+    {
+      modelName: "gemini-3.1-flash-lite-preview",
+      displayName: "Gemini 3.1 Flash Lite (Preview)",
+      provider: "gemini_cli",
+    },
+    // Gemini 2.5 series
     {
       modelName: "gemini-2.5-pro",
       displayName: "Gemini 2.5 Pro",
@@ -130,17 +197,21 @@ export interface GeminiCliStreamOptions {
  * Stream a response from Gemini CLI
  */
 export async function streamGeminiCliResponse(
-  options: GeminiCliStreamOptions
+  options: GeminiCliStreamOptions,
 ): Promise<void> {
-  const { prompt, model = "auto", onChunk, onComplete, onError, abortSignal } = options;
-  
-  const geminiPath = getGeminiCliPath();
-  const args = [
-    "--output-format", "stream-json",
-    "-p", prompt,
-  ];
+  const {
+    prompt,
+    model = "auto",
+    onChunk,
+    onComplete,
+    onError,
+    abortSignal,
+  } = options;
 
-  if (model && model !== "auto") {
+  const geminiPath = getGeminiCliPath();
+  const args = ["--output-format", "stream-json", "-p", prompt];
+
+  if (model && model !== "auto" && model !== "manual") {
     args.push("--model", model);
   }
 
@@ -167,20 +238,24 @@ export async function streamGeminiCliResponse(
 
   geminiProcess.stdout.on("data", (data: Buffer) => {
     buffer += data.toString();
-    
+
     // Process line by line
     const lines = buffer.split("\n");
     buffer = lines.pop() || ""; // Keep incomplete line in buffer
 
     for (const line of lines) {
       const trimmedLine = line.trim();
-      if (!trimmedLine || trimmedLine.startsWith("[STARTUP]") || trimmedLine.startsWith("Loaded cached")) {
+      if (
+        !trimmedLine ||
+        trimmedLine.startsWith("[STARTUP]") ||
+        trimmedLine.startsWith("Loaded cached")
+      ) {
         continue; // Skip startup messages and empty lines
       }
 
       try {
         const event = JSON.parse(trimmedLine) as GeminiStreamEvent;
-        
+
         if (event.type === "message" && event.role === "assistant") {
           const content = event.content;
           if (event.delta) {
@@ -207,7 +282,10 @@ export async function streamGeminiCliResponse(
   geminiProcess.stderr.on("data", (data: Buffer) => {
     const errorText = data.toString();
     // Filter out startup messages that go to stderr
-    if (!errorText.includes("[STARTUP]") && !errorText.includes("Loaded cached")) {
+    if (
+      !errorText.includes("[STARTUP]") &&
+      !errorText.includes("Loaded cached")
+    ) {
       logger.warn(`Gemini CLI stderr: ${errorText}`);
     }
   });
@@ -244,22 +322,22 @@ export async function streamGeminiCliResponse(
 export function registerGeminiCliHandlers() {
   ipcMain.handle(
     "local-models:list-gemini-cli",
-    async (): Promise<{ models: LocalModel[] }> => {
+    async (): Promise<LocalModelListResponse> => {
       return fetchGeminiCliModels();
-    }
+    },
   );
 
   ipcMain.handle(
     "local-models:gemini-cli-available",
     async (): Promise<boolean> => {
       return isGeminiCliAvailable();
-    }
+    },
   );
 
   ipcMain.handle(
     "local-models:gemini-cli-version",
     async (): Promise<string | null> => {
       return getGeminiCliVersion();
-    }
+    },
   );
 }

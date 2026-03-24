@@ -1,35 +1,46 @@
 import { ipcMain } from "electron";
 import log from "electron-log";
 import { execSync } from "node:child_process";
-import type { LocalModel } from "../types/language-model";
+import type { LocalModelListResponse, LocalModel } from "../ipc_types";
 
 const logger = log.scope("letta_handler");
 
-// Resolve letta binary path. Electron doesn't inherit the user's full shell
-// PATH, so we try common install locations in order.
+// Default path to letta CLI
 export function getLettaPath(): string {
   if (process.env.LETTA_PATH) return process.env.LETTA_PATH;
+
   try {
-    const result = execSync("which letta 2>/dev/null || command -v letta 2>/dev/null", {
-      encoding: "utf-8",
-      shell: "/bin/bash",
-    }).trim();
-    if (result) return result;
+    const resolved = execSync(
+      "which letta 2>/dev/null || command -v letta 2>/dev/null",
+      {
+        encoding: "utf-8",
+        shell: "/bin/bash",
+      }
+    ).trim();
+    if (resolved) return resolved;
   } catch {
-    // fall through to common locations
+    // Fall through to common local paths.
   }
+
   const home = process.env.HOME || "";
   const candidates = [
+    `${home}/bin/letta`,
     `${home}/.npm-global/bin/letta`,
     `${home}/.local/bin/letta`,
-    `${home}/bin/letta`,
     "/usr/local/bin/letta",
     "/usr/bin/letta",
   ];
-  for (const p of candidates) {
-    try { execSync(`test -x "${p}"`, { stdio: "ignore" }); return p; } catch { /* try next */ }
+
+  for (const candidate of candidates) {
+    try {
+      execSync(`test -x "${candidate}"`, { stdio: "ignore" });
+      return candidate;
+    } catch {
+      // try next
+    }
   }
-  return "letta"; // last resort — let the OS find it
+
+  return "letta";
 }
 
 /**
@@ -71,42 +82,35 @@ interface LettaModelInfo {
  * Letta uses -m flag with model handles
  */
 function getLettaModels(): LettaModelInfo[] {
-  // Model handles verified from Letta Code v0.18.4
+  // Letta supports various models through its -m flag
+  // These are the model handles available from `letta --help`
   const models: LettaModelInfo[] = [
     { model: "auto", displayName: "Auto (Default)" },
-    // Anthropic
-    { model: "claude-opus-4-6", displayName: "Claude Opus 4.6" },
-    { model: "claude-sonnet-4-6", displayName: "Claude Sonnet 4.6" },
-    { model: "claude-opus-4-5", displayName: "Claude Opus 4.5" },
-    { model: "claude-sonnet-4-5-20250929", displayName: "Claude Sonnet 4.5" },
-    { model: "claude-sonnet-4-20250514", displayName: "Claude Sonnet 4" },
-    // OpenAI
-    { model: "gpt-5.2", displayName: "GPT-5.2" },
-    { model: "gpt-5.1", displayName: "GPT-5.1" },
-    { model: "gpt-5.1-codex", displayName: "GPT-5.1 Codex" },
-    { model: "gpt-5.1-codex-mini", displayName: "GPT-5.1 Codex Mini" },
-    { model: "gpt-5", displayName: "GPT-5" },
+    // Anthropic models
+    { model: "opus", displayName: "Claude Opus 4.5" },
+    { model: "opus-4.1", displayName: "Claude Opus 4.1" },
+    { model: "sonnet-4.5", displayName: "Claude Sonnet 4.5" },
+    { model: "sonnet-4.5-no-reasoning", displayName: "Claude Sonnet 4.5 (No Reasoning)" },
+    { model: "haiku", displayName: "Claude Haiku 4.5" },
+    // OpenAI models
     { model: "gpt-5-codex", displayName: "GPT-5 Codex" },
-    { model: "gpt-5-mini", displayName: "GPT-5 Mini" },
-    { model: "gpt-5-nano", displayName: "GPT-5 Nano" },
-    // Google
-    { model: "gemini-3.1-pro-preview", displayName: "Gemini 3.1 Pro (Preview)" },
-    { model: "gemini-3-flash-preview", displayName: "Gemini 3 Flash (Preview)" },
-    { model: "gemini-2.5-pro", displayName: "Gemini 2.5 Pro" },
-    { model: "gemini-flash-latest", displayName: "Gemini 2.5 Flash" },
-    // xAI
-    { model: "grok-4", displayName: "Grok 4" },
-    { model: "grok-code-fast-1", displayName: "Grok Code Fast" },
-    { model: "grok-3", displayName: "Grok 3" },
-    // OpenRouter
-    { model: "qwen/qwen3-coder", displayName: "Qwen3 Coder (OpenRouter)" },
-    { model: "deepseek/deepseek-chat-v3.1", displayName: "DeepSeek v3.1 (OpenRouter)" },
-    { model: "moonshotai/kimi-k2.5", displayName: "Kimi K2.5 (OpenRouter)" },
-    { model: "z-ai/glm-5", displayName: "GLM-5 (OpenRouter)" },
-    { model: "openrouter/z-ai/glm-5-turbo", displayName: "GLM-5 Turbo (OpenRouter)" },
-    { model: "z-ai/glm-4.7", displayName: "GLM-4.7 (OpenRouter)" },
-    { model: "minimax/minimax-m2.5", displayName: "MiniMax M2.5 (OpenRouter)" },
-    { model: "openrouter/free", displayName: "Free (OpenRouter)" },
+    { model: "gpt-5.2-medium", displayName: "GPT-5.2 (Medium)" },
+    { model: "gpt-5.2-high", displayName: "GPT-5.2 (High)" },
+    { model: "gpt-5.1-medium", displayName: "GPT-5.1 (Medium)" },
+    { model: "gpt-5.1-high", displayName: "GPT-5.1 (High)" },
+    { model: "gpt-5.1-codex-medium", displayName: "GPT-5.1 Codex (Medium)" },
+    { model: "gpt-5.1-codex-high", displayName: "GPT-5.1 Codex (High)" },
+    { model: "gpt-5-medium", displayName: "GPT-5 (Medium)" },
+    { model: "gpt-5-high", displayName: "GPT-5 (High)" },
+    { model: "gpt-4.1", displayName: "GPT-4.1" },
+    { model: "o4-mini", displayName: "O4 Mini" },
+    // Google models
+    { model: "gemini-3", displayName: "Gemini 3 Pro" },
+    { model: "gemini-pro", displayName: "Gemini 2.5 Pro" },
+    { model: "gemini-flash", displayName: "Gemini 2.5 Flash" },
+    // Other models
+    { model: "deepseek-chat-v3.1", displayName: "DeepSeek Chat v3.1" },
+    { model: "kimi-k2", displayName: "Kimi K2" },
   ];
 
   return models;
@@ -115,7 +119,7 @@ function getLettaModels(): LettaModelInfo[] {
 /**
  * Fetch available models from Letta CLI
  */
-export async function fetchLettaModels(): Promise<{ models: LocalModel[] }> {
+export async function fetchLettaModels(): Promise<LocalModelListResponse> {
   if (!isLettaAvailable()) {
     throw new Error(
       "Letta CLI is not installed or not found in PATH. Install it from: https://github.com/letta-ai/letta-code"
@@ -148,7 +152,7 @@ export async function fetchLettaModels(): Promise<{ models: LocalModel[] }> {
 export function registerLettaHandlers() {
   ipcMain.handle(
     "local-models:list-letta",
-    async (): Promise<{ models: LocalModel[] }> => {
+    async (): Promise<LocalModelListResponse> => {
       return fetchLettaModels();
     }
   );

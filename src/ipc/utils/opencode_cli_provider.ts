@@ -1,10 +1,14 @@
 import { spawn } from "node:child_process";
-import fs from "node:fs";
-import path from "node:path";
 import type { LanguageModelV2 } from "@ai-sdk/provider";
 import log from "electron-log";
-import { getOpenCodePath, isOpenCodeAvailable } from "../handlers/local_model_opencode_handler";
-import { getUserDataPath } from "../../paths/paths";
+import {
+  getOpenCodePath,
+  isOpenCodeAvailable,
+} from "../handlers/local_model_opencode_handler";
+import {
+  buildCliProjectContext,
+  extractCliUserMessage,
+} from "./cli_context";
 
 const logger = log.scope("opencode_cli_provider");
 
@@ -99,63 +103,19 @@ interface OpenCodeError {
   };
 }
 
-type OpenCodeStreamEvent = OpenCodeStepStart | OpenCodeText | OpenCodeToolUse | OpenCodeStepFinish | OpenCodeError;
+type OpenCodeStreamEvent =
+  | OpenCodeStepStart
+  | OpenCodeText
+  | OpenCodeToolUse
+  | OpenCodeStepFinish
+  | OpenCodeError;
 
 // Module-level state for the current working directory
 let currentWorkingDirectory: string | undefined;
 
-// Session management - persisted to disk so sessions survive Dyad restarts
+// Session management - map of appId/chatId to OpenCode session ID
 const sessionMap = new Map<string, string>();
 let currentSessionKey: string | undefined;
-let sessionMapLoaded = false;
-
-// Track which sessions have already received the system prompt (in-memory only,
-// resets on Dyad restart which is fine — first message of a new process gets it).
-const sessionSystemPromptSent = new Set<string>();
-
-function getSessionMapPath(): string {
-  return path.join(getUserDataPath(), "opencode-sessions.json");
-}
-
-function loadSessionMap(): void {
-  if (sessionMapLoaded) return;
-  sessionMapLoaded = true;
-
-  try {
-    const filePath = getSessionMapPath();
-    if (fs.existsSync(filePath)) {
-      const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-      if (data && typeof data === "object") {
-        for (const [key, value] of Object.entries(data)) {
-          if (typeof value === "string") {
-            sessionMap.set(key, value);
-          }
-        }
-        logger.info(`Loaded ${sessionMap.size} OpenCode sessions from disk`);
-      }
-    }
-  } catch (err) {
-    logger.warn(`Failed to load OpenCode session map from disk: ${err}`);
-  }
-}
-
-function saveSessionMap(): void {
-  try {
-    const filePath = getSessionMapPath();
-    const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    const data: Record<string, string> = {};
-    for (const [key, value] of sessionMap.entries()) {
-      data[key] = value;
-    }
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
-    logger.debug(`Saved ${sessionMap.size} OpenCode sessions to disk`);
-  } catch (err) {
-    logger.warn(`Failed to save OpenCode session map to disk: ${err}`);
-  }
-}
 
 /**
  * Set the working directory for OpenCode CLI operations
@@ -174,7 +134,6 @@ export function setOpenCodeWorkingDirectory(cwd: string | undefined): void {
 export function setOpenCodeSessionKey(key: string | undefined): void {
   currentSessionKey = key;
   if (key) {
-    loadSessionMap(); // Ensure map is loaded before any session operations
     logger.info(`OpenCode session key set to: ${key}`);
   }
 }
@@ -183,13 +142,14 @@ export function setOpenCodeSessionKey(key: string | undefined): void {
  * Get the stored session ID for a given key
  */
 export function getOpenCodeSessionId(key: string): string | undefined {
-  loadSessionMap();
   return sessionMap.get(key);
 }
 
+/**
+ * Store a session ID for a given key
+ */
 function storeSessionId(key: string, sessionId: string): void {
   sessionMap.set(key, sessionId);
-  saveSessionMap();
   logger.info(`Stored OpenCode session ID: ${sessionId} for key: ${key}`);
 }
 
@@ -198,8 +158,6 @@ function storeSessionId(key: string, sessionId: string): void {
  */
 export function clearOpenCodeSession(key: string): void {
   sessionMap.delete(key);
-  sessionSystemPromptSent.delete(key);
-  saveSessionMap();
   logger.info(`Cleared OpenCode session for key: ${key}`);
 }
 
@@ -227,163 +185,46 @@ export interface OpenCodeProviderOptions {
 
 export type OpenCodeProvider = (modelId: string) => LanguageModelV2;
 
-function escapeAttr(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-function stripFileWrapper(output: string): string {
-  let result = output;
-  const fileMatch = result.match(/^<file>\n?([\s\S]*?)\n?<\/file>$/);
-  if (fileMatch) {
-    result = fileMatch[1];
-  }
-  result = result.replace(/^\d{5}\| /gm, "");
-  return result;
-}
-
-function isFileWriteTool(name: string): boolean {
-  return name === "write";
-}
-
-function isFileEditTool(name: string): boolean {
-  return name === "edit";
-}
-
-function isFileReadTool(name: string): boolean {
-  return name === "read";
-}
-
-function isGlobTool(name: string): boolean {
-  return name === "glob";
-}
-
-function isGrepTool(name: string): boolean {
-  return name === "grep" || name === "ast_grep_search";
-}
-
-function isBashTool(name: string): boolean {
-  return name === "bash";
-}
-
-function isInternalTool(name: string): boolean {
-  return ["todowrite", "call_omo_agent", "background_output", "todoread"].includes(name);
-}
-
-function buildOpeningTag(
-  toolName: string,
-  input: Record<string, unknown> | undefined,
-  title: string | undefined,
-): string {
-  const filePath = ((input?.filePath || input?.path || input?.file || "") as string);
-  const description = title || toolName;
-
-  if (isFileWriteTool(toolName)) {
-    return `\n<dyad-write path="${escapeAttr(filePath)}" description="${escapeAttr(description)}">`;
-  }
-  if (isFileEditTool(toolName)) {
-    return `\n<dyad-write path="${escapeAttr(filePath)}" description="${escapeAttr(description)}">`;
-  }
-  if (isFileReadTool(toolName)) {
-    return `\n<dyad-read path="${escapeAttr(filePath)}">`;
-  }
-  if (isGlobTool(toolName)) {
-    const dir = (input?.path || input?.pattern || "") as string;
-    return `\n<dyad-list-files directory="${escapeAttr(dir)}">`;
-  }
-  if (isGrepTool(toolName)) {
-    return "\n<dyad-code-search-result>";
-  }
-  if (isBashTool(toolName)) {
-    const cmd = (input?.command || "") as string;
-    const desc = (input?.description || "") as string;
-    return `\n<dyad-mcp-tool-call server="opencode" tool="bash">${escapeAttr(desc || cmd)}`;
-  }
-  return `\n<dyad-mcp-tool-call server="opencode" tool="${escapeAttr(toolName)}">`;
-}
-
-function buildClosingTag(
-  toolName: string,
-  input: Record<string, unknown> | undefined,
-  output: string | undefined,
-  metadata: Record<string, unknown> | undefined,
-): string {
-  if (isFileWriteTool(toolName)) {
-    const content = (input?.content as string) || output || "";
-    return `${content}</dyad-write>\n`;
-  }
-  if (isFileEditTool(toolName)) {
-    const diff = (metadata?.diff as string) || output || "";
-    return `${diff}</dyad-write>\n`;
-  }
-  if (isFileReadTool(toolName)) {
-    const content = stripFileWrapper(output || "");
-    return `${content}</dyad-read>\n`;
-  }
-  if (isGlobTool(toolName)) {
-    return `${output || ""}</dyad-list-files>\n`;
-  }
-  if (isGrepTool(toolName)) {
-    return `${output || ""}</dyad-code-search-result>\n`;
-  }
-  if (isBashTool(toolName)) {
-    const exitCode = metadata?.exit ?? "";
-    const resultOutput = (metadata?.output as string) || output || "";
-    return `</dyad-mcp-tool-call>\n<dyad-mcp-tool-result server="opencode" tool="bash">${resultOutput}${exitCode !== "" && exitCode !== 0 ? `\n(exit code: ${exitCode})` : ""}</dyad-mcp-tool-result>\n`;
-  }
-  return `</dyad-mcp-tool-call>\n<dyad-mcp-tool-result server="opencode" tool="${escapeAttr(toolName)}">${output || ""}</dyad-mcp-tool-result>\n`;
-}
-
-function buildErrorTag(
-  toolName: string,
-  errorMsg: string,
-  hadOpeningTag: boolean,
-): string {
-  let result = "";
-  if (hadOpeningTag) {
-    if (isFileWriteTool(toolName) || isFileEditTool(toolName)) {
-      result += "</dyad-write>\n";
-    } else if (isFileReadTool(toolName)) {
-      result += "</dyad-read>\n";
-    } else if (isGlobTool(toolName)) {
-      result += "</dyad-list-files>\n";
-    } else if (isGrepTool(toolName)) {
-      result += "</dyad-code-search-result>\n";
-    } else {
-      result += "</dyad-mcp-tool-call>\n";
-    }
-  }
-  result += `<dyad-output type="error" message="${escapeAttr(errorMsg)}"></dyad-output>\n`;
-  return result;
+/**
+ * Format tool output for display - truncate if too long
+ */
+function formatToolOutput(output: string | undefined, maxLength = 500): string {
+  if (!output) return "";
+  if (output.length <= maxLength) return output;
+  return `${output.slice(0, maxLength)}\n... (truncated)`;
 }
 
 /**
  * Creates an OpenCode CLI provider that implements the LanguageModelV2 interface
  */
 export function createOpenCodeProvider(
-  options?: OpenCodeProviderOptions
+  options?: OpenCodeProviderOptions,
 ): OpenCodeProvider {
   if (!isOpenCodeAvailable()) {
     throw new Error(
-      "OpenCode CLI is not installed. Install it from: https://opencode.ai"
+      "OpenCode CLI is not installed. Install it from: https://opencode.ai",
     );
   }
 
   return (modelId: string): LanguageModelV2 => {
     const effectiveModel = modelId || options?.model;
-    logger.info(`[DEBUG MODEL TRACE] createOpenCodeProvider called: modelId="${modelId}", options?.model="${options?.model}", effectiveModel="${effectiveModel}"`);
 
     return {
       specificationVersion: "v2",
       provider: "opencode",
       modelId: effectiveModel || "default",
       supportedUrls: {},
-      
+
       async doGenerate(options): Promise<any> {
         const { prompt, abortSignal } = options;
 
-        // Only send system prompt on first message of a session
-        const sessionAlreadyHasSystemPrompt = !!(currentSessionKey && sessionSystemPromptSent.has(currentSessionKey));
-        const userMessage = extractUserMessage(prompt, !sessionAlreadyHasSystemPrompt);
+        // Strip Dyad's system prompt, inject project context
+        const cwd = currentWorkingDirectory || process.cwd();
+        const projectContext = buildCliProjectContext(cwd);
+        const rawMessage = extractCliUserMessage(prompt);
+        const userMessage = projectContext
+          ? `${projectContext}\n\n${rawMessage}`
+          : rawMessage;
 
         return new Promise((resolve, reject) => {
           const opencodePath = getOpenCodePath();
@@ -400,15 +241,13 @@ export function createOpenCodeProvider(
               args.push("-s", existingSessionId);
               logger.info(`Continuing OpenCode session: ${existingSessionId}`);
             }
-            // Mark that this session has received the system prompt
-            sessionSystemPromptSent.add(currentSessionKey);
           }
 
           args.push(userMessage);
 
-          logger.info(`OpenCode CLI doGenerate with model: ${effectiveModel}, cwd: ${currentWorkingDirectory || process.cwd()}`);
-          logger.info(`[DEBUG MODEL TRACE] doGenerate full args: ${JSON.stringify([opencodePath, ...args])}`);
-          logger.info(`[DEBUG MODEL TRACE] doGenerate env: HOME=${process.env.HOME}, XDG_CONFIG_HOME=${process.env.XDG_CONFIG_HOME || "(unset)"}, OPENCODE_MODEL=${process.env.OPENCODE_MODEL || "(unset)"}`);
+          logger.info(
+            `OpenCode CLI doGenerate with model: ${effectiveModel}, cwd: ${currentWorkingDirectory || process.cwd()}`,
+          );
 
           const opencodeProcess = spawn(opencodePath, args, {
             stdio: ["ignore", "pipe", "pipe"],
@@ -434,7 +273,7 @@ export function createOpenCodeProvider(
                 const event = JSON.parse(line) as OpenCodeStreamEvent;
                 // Store session ID from any event
                 parseAndStoreSessionId(event);
-                
+
                 if (event.type === "text") {
                   output = event.part.text;
                 } else if (event.type === "step_finish") {
@@ -472,9 +311,13 @@ export function createOpenCodeProvider(
       async doStream(options): Promise<any> {
         const { prompt, abortSignal } = options;
 
-        // Only send system prompt on first message of a session
-        const sessionAlreadyHasSystemPrompt = !!(currentSessionKey && sessionSystemPromptSent.has(currentSessionKey));
-        const userMessage = extractUserMessage(prompt, !sessionAlreadyHasSystemPrompt);
+        // Strip Dyad's system prompt, inject project context
+        const cwd = currentWorkingDirectory || process.cwd();
+        const projectContext = buildCliProjectContext(cwd);
+        const rawMessage = extractCliUserMessage(prompt);
+        const userMessage = projectContext
+          ? `${projectContext}\n\n${rawMessage}`
+          : rawMessage;
 
         const opencodePath = getOpenCodePath();
         const args = ["run", "--format", "json"];
@@ -490,15 +333,13 @@ export function createOpenCodeProvider(
             args.push("-s", existingSessionId);
             logger.info(`Continuing OpenCode session: ${existingSessionId}`);
           }
-          // Mark that this session has received the system prompt
-          sessionSystemPromptSent.add(currentSessionKey);
         }
 
         args.push(userMessage);
 
-        logger.info(`OpenCode CLI doStream with model: ${effectiveModel}, cwd: ${currentWorkingDirectory || process.cwd()}`);
-        logger.info(`[DEBUG MODEL TRACE] doStream full args: ${JSON.stringify([opencodePath, ...args])}`);
-        logger.info(`[DEBUG MODEL TRACE] doStream env: HOME=${process.env.HOME}, XDG_CONFIG_HOME=${process.env.XDG_CONFIG_HOME || "(unset)"}, OPENCODE_MODEL=${process.env.OPENCODE_MODEL || "(unset)"}`);
+        logger.info(
+          `OpenCode CLI doStream with model: ${effectiveModel}, cwd: ${currentWorkingDirectory || process.cwd()}`,
+        );
 
         const opencodeProcess = spawn(opencodePath, args, {
           stdio: ["ignore", "pipe", "pipe"],
@@ -518,7 +359,7 @@ export function createOpenCodeProvider(
         let totalInputTokens = 0;
         let totalOutputTokens = 0;
         let lastTextContent = "";
-        
+
         // Track active tools for status updates
         const activeTools = new Map<string, string>();
 
@@ -526,7 +367,7 @@ export function createOpenCodeProvider(
           start(controller) {
             opencodeProcess.stdout.on("data", (data: Buffer) => {
               buffer += data.toString();
-              
+
               const lines = buffer.split("\n");
               buffer = lines.pop() || "";
 
@@ -536,20 +377,19 @@ export function createOpenCodeProvider(
 
                 try {
                   const event = JSON.parse(trimmedLine) as OpenCodeStreamEvent;
-                  
+
                   // Store session ID from any event
                   parseAndStoreSessionId(event);
-                  
+
                   if (event.type === "error") {
-                    logger.error(`[DEBUG MODEL TRACE] OpenCode error event FULL: ${JSON.stringify(event)}`);
-                    const errorMsg = event.error.data?.message || event.error.name;
+                    const errorMsg =
+                      event.error.data?.message || event.error.name;
                     controller.error(new Error(errorMsg));
                     streamClosed = true;
                     return;
                   }
 
                   if (event.type === "step_start") {
-                    // Send a visual indicator that a new step is starting
                     if (!textStartSent) {
                       controller.enqueue({
                         type: "text-start",
@@ -557,12 +397,19 @@ export function createOpenCodeProvider(
                       });
                       textStartSent = true;
                     }
-                    logger.debug(`OpenCode step started: ${event.part.messageID}`);
+                    controller.enqueue({
+                      type: "text-delta",
+                      id: textId,
+                      delta: "\n*Thinking...*\n\n",
+                    });
+                    logger.debug(
+                      `OpenCode step started: ${event.part.messageID}`,
+                    );
                   }
-                  
+
                   if (event.type === "text") {
                     const content = event.part.text;
-                    
+
                     if (!textStartSent) {
                       controller.enqueue({
                         type: "text-start",
@@ -570,14 +417,14 @@ export function createOpenCodeProvider(
                       });
                       textStartSent = true;
                     }
-                    
+
                     // OpenCode sends full text, not deltas - calculate delta
                     if (content !== lastTextContent) {
-                      const delta = content.startsWith(lastTextContent) 
-                        ? content.slice(lastTextContent.length) 
+                      const delta = content.startsWith(lastTextContent)
+                        ? content.slice(lastTextContent.length)
                         : content;
                       lastTextContent = content;
-                      
+
                       if (delta) {
                         controller.enqueue({
                           type: "text-delta",
@@ -587,18 +434,13 @@ export function createOpenCodeProvider(
                       }
                     }
                   }
-                  
-                    if (event.type === "tool_use") {
+
+                  if (event.type === "tool_use") {
                     const tool = event.part;
                     const toolName = tool.tool;
                     const status = tool.state.status;
                     const callID = tool.callID;
 
-                    if (isInternalTool(toolName)) {
-                      logger.debug(`Skipping internal tool: ${toolName}`);
-                      continue;
-                    }
-                    
                     if (!textStartSent) {
                       controller.enqueue({
                         type: "text-start",
@@ -607,52 +449,74 @@ export function createOpenCodeProvider(
                       textStartSent = true;
                     }
 
+                    // Show tool activity with full details
                     if (status === "pending" || status === "running") {
                       if (!activeTools.has(callID)) {
                         activeTools.set(callID, toolName);
-                        const delta = buildOpeningTag(toolName, tool.state.input, tool.state.title);
+                        const title = tool.state.title || toolName;
+                        let toolMessage = `\n\n---\n**Tool: ${title}**\n`;
+
+                        // Show input if available
+                        if (
+                          tool.state.input &&
+                          Object.keys(tool.state.input).length > 0
+                        ) {
+                          const inputStr = JSON.stringify(
+                            tool.state.input,
+                            null,
+                            2,
+                          );
+                          if (inputStr.length < 200) {
+                            toolMessage += `\`\`\`json\n${inputStr}\n\`\`\`\n`;
+                          }
+                        }
+
                         controller.enqueue({
                           type: "text-delta",
                           id: textId,
-                          delta,
+                          delta: toolMessage,
                         });
                       }
                     } else if (status === "completed") {
-                      const hadOpening = activeTools.has(callID);
-                      if (!hadOpening) {
-                        const openTag = buildOpeningTag(toolName, tool.state.input, tool.state.title);
-                        controller.enqueue({
-                          type: "text-delta",
-                          id: textId,
-                          delta: openTag,
-                        });
-                      }
                       activeTools.delete(callID);
-                      const delta = buildClosingTag(toolName, tool.state.input, tool.state.output, tool.state.metadata);
+                      const title = tool.state.title || toolName;
+                      let resultMessage = `**${title}** completed\n`;
+
+                      // Show output if available (truncated)
+                      if (tool.state.output) {
+                        const formattedOutput = formatToolOutput(
+                          tool.state.output,
+                          1000,
+                        );
+                        resultMessage += `\`\`\`\n${formattedOutput}\n\`\`\`\n---\n\n`;
+                      } else {
+                        resultMessage += "---\n\n";
+                      }
+
                       controller.enqueue({
                         type: "text-delta",
                         id: textId,
-                        delta,
+                        delta: resultMessage,
                       });
                       logger.info(`OpenCode tool completed: ${toolName}`);
                     } else if (status === "error") {
-                      const hadOpening = activeTools.has(callID);
                       activeTools.delete(callID);
                       const errorMsg = tool.state.error || "Unknown error";
-                      const delta = buildErrorTag(toolName, errorMsg, hadOpening);
                       controller.enqueue({
                         type: "text-delta",
                         id: textId,
-                        delta,
+                        delta: `**${toolName}** failed: ${errorMsg}\n---\n\n`,
                       });
-                      logger.warn(`OpenCode tool error: ${toolName} - ${errorMsg}`);
+                      logger.warn(
+                        `OpenCode tool error: ${toolName} - ${errorMsg}`,
+                      );
                     }
                   }
-                  
+
                   if (event.type === "step_finish") {
                     totalInputTokens += event.part.tokens.input;
                     totalOutputTokens += event.part.tokens.output;
-                    
+
                     // Only close stream if reason is "stop" (not "tool-calls")
                     if (event.part.reason === "stop") {
                       if (textStartSent) {
@@ -676,14 +540,16 @@ export function createOpenCodeProvider(
                     }
                   }
                 } catch {
-                  logger.debug(`Non-JSON from OpenCode CLI: ${trimmedLine.slice(0, 100)}`);
+                  logger.debug(
+                    `Non-JSON from OpenCode CLI: ${trimmedLine.slice(0, 100)}`,
+                  );
                 }
               }
             });
 
             opencodeProcess.stderr.on("data", (data: Buffer) => {
               const text = data.toString();
-              logger.error(`[DEBUG MODEL TRACE] OpenCode CLI stderr: ${text}`);
+              logger.warn(`OpenCode CLI stderr: ${text}`);
             });
 
             opencodeProcess.on("error", (error) => {
@@ -697,7 +563,9 @@ export function createOpenCodeProvider(
               // Process remaining buffer
               if (buffer.trim() && !streamClosed) {
                 try {
-                  const event = JSON.parse(buffer.trim()) as OpenCodeStreamEvent;
+                  const event = JSON.parse(
+                    buffer.trim(),
+                  ) as OpenCodeStreamEvent;
                   parseAndStoreSessionId(event);
                   if (event.type === "step_finish") {
                     totalInputTokens += event.part.tokens.input;
@@ -707,7 +575,7 @@ export function createOpenCodeProvider(
                   // Ignore
                 }
               }
-              
+
               if (!streamClosed) {
                 if (textStartSent) {
                   controller.enqueue({
@@ -740,69 +608,6 @@ export function createOpenCodeProvider(
   };
 }
 
-/**
- * Extract the user message from a prompt array.
- * includeSystemPrompt controls whether the system prompt is prepended.
- * On subsequent turns of the same OpenCode session, omit it — the model
- * already has it in its session context.
- */
-function extractUserMessage(prompt: any, includeSystemPrompt: boolean): string {
-  let userMessage = "";
-  let systemPrompt = "";
-
-  if (typeof prompt === "string") {
-    return prompt;
-  }
-
-  if (Array.isArray(prompt)) {
-    // Extract system prompt if present
-    for (const msg of prompt) {
-      if (msg.role === "system") {
-        if (typeof msg.content === "string") {
-          systemPrompt = msg.content;
-          break;
-        }
-      }
-    }
-
-    // Find the last user message
-    for (let i = prompt.length - 1; i >= 0; i--) {
-      const msg = prompt[i];
-      if (msg.role === "user") {
-        if (typeof msg.content === "string") {
-          userMessage = msg.content;
-          break;
-        }
-        if (Array.isArray(msg.content)) {
-          userMessage = msg.content
-            .filter((part: any) => part.type === "text")
-            .map((part: any) => part.text)
-            .join("\n");
-          break;
-        }
-      }
-    }
-
-    // Fallback: concatenate all messages
-    if (!userMessage) {
-      userMessage = prompt
-        .map((msg: any) => {
-          if (typeof msg.content === "string") {
-            return `${msg.role}: ${msg.content}`;
-          }
-          return "";
-        })
-        .filter(Boolean)
-        .join("\n");
-    }
-  } else {
-    return String(prompt);
-  }
-
-  // Prepend system prompt only on first message of this session
-  if (systemPrompt && includeSystemPrompt) {
-    return `<system_instructions>\n${systemPrompt}\n</system_instructions>\n\n${userMessage}`;
-  }
-  
-  return userMessage;
-}
+// extractUserMessage removed — using shared extractCliUserMessage from cli_context.ts
+// which strips Dyad's system prompt (conflicting <dyad-write> tag instructions)
+// and lets the CLI use its own system prompt and tools.
