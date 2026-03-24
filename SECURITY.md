@@ -6,4 +6,4 @@ We will provide security fixes for the latest version of Dyad and encourage Dyad
 
 ## Reporting a Vulnerability
 
-Please file security vulnerabilities by using [report a vulnerability](https://github.com/rayngnpc/dyad-with-opencode/security/advisories/new). Please do not file security vulnerabilities as a regular issue as the information could be used to exploit users.
+Please file security vulnerabilities by using [report a vulnerability](https://github.com/rayngnpc/dyad-with-cli/security/advisories/new). Please do not file security vulnerabilities as a regular issue as the information could be used to exploit users.
