@@ -26,7 +26,7 @@ The original Dyad supports cloud models (Claude, GPT, Gemini API) and basic loca
 ## Providers
 
 ### Gemini CLI
-Uses Google's official [Gemini CLI](https://github.com/google-gemini/gemini-cli). Runs Gemini models locally via your Google account — **free tier gives 1,000 requests/day** with no API key needed.
+Uses Google's official [Gemini CLI](https://github.com/google-gemini/gemini-cli). Runs Gemini models locally via your Google account — **free tier available, no API key needed**.
 
 **Available models:**
 - Auto (Gemini 3) — recommended
@@ -133,7 +133,7 @@ Outputs:
 
 ## Safety Note
 
-This fork spawns the official `gemini` CLI binary as a subprocess — it **never extracts or handles OAuth tokens directly**. This is fundamentally different from tools like OpenClaw that were banned for token extraction. Google sees normal CLI traffic. See [Gemini CLI ToS](https://github.com/google-gemini/gemini-cli/blob/main/docs/tos-privacy.md).
+This fork invokes the `gemini` binary as a subprocess — the same as running it in a terminal. It never extracts or handles OAuth tokens. See [Gemini CLI ToS](https://github.com/google-gemini/gemini-cli/blob/main/docs/tos-privacy.md).
 
 ---
 
