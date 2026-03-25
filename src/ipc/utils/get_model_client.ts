@@ -28,7 +28,7 @@ import { LM_STUDIO_BASE_URL } from "./lm_studio_utils";
 import { createOllamaProvider } from "./ollama_provider";
 import { getOllamaApiUrl } from "../handlers/local_model_ollama_handler";
 import { createFallback } from "./fallback_ai_model";
-// import { createGeminiCliProvider } from "./gemini_cli_provider"; // DISABLED: ban risk
+import { createGeminiCliProvider } from "./gemini_cli_provider";
 import { createOpenCodeProvider } from "./opencode_cli_provider";
 import { createLettaProvider } from "./letta_cli_provider";
 
@@ -454,13 +454,14 @@ function getRegularModelClient(
         backupModelClients: [],
       };
     }
-    // DISABLED: Gemini CLI carries high ban risk for Google accounts.
-    // Google actively bans accounts using automated OAuth-spawned CLI.
-    // Ban cascades to entire Google account (Gmail, Drive, Workspace).
     case "gemini_cli": {
-      throw new Error(
-        "Gemini CLI provider is disabled due to Google account ban risk. Use OpenCode or another provider instead."
-      );
+      const provider = createGeminiCliProvider();
+      return {
+        modelClient: {
+          model: provider(model.name),
+        },
+        backupModelClients: [],
+      };
     }
     case "opencode": {
       log.info(`[DEBUG MODEL TRACE] get_model_client case "opencode": model.name="${model.name}", model.provider="${model.provider}"`);

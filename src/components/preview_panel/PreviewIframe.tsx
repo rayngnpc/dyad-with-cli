@@ -186,7 +186,7 @@ export const PreviewIframe = ({ loading }: { loading: boolean }) => {
   const { restartApp } = useRunApp();
   const { settings, updateSettings } = useSettings();
   const { userBudget } = useUserBudgetInfo();
-  const isProMode = !!userBudget;
+  const isProMode = true; // Enabled for local fork (originally: !!userBudget)
 
   // Preserved URL state (persists across HMR-induced remounts)
   const [preservedUrls, setPreservedUrls] = useAtom(previewCurrentUrlAtom);
