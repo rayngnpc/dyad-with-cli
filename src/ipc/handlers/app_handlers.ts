@@ -9,7 +9,14 @@ import { miscContracts } from "../types/misc";
 import { systemContracts } from "../types/system";
 import fs from "node:fs";
 import path from "node:path";
-import { getDyadAppPath, getUserDataPath } from "../../paths/paths";
+import {
+  getDyadAppPath,
+  getDefaultDyadAppsDirectory,
+  isAppLocationAccessible,
+  getUserDataPath,
+  getDyadAppsBaseDirectory,
+  invalidateDyadAppsBaseDirectoryCache,
+} from "../../paths/paths";
 import { ChildProcess, spawn } from "node:child_process";
 import { promises as fsPromises } from "node:fs";
 
@@ -845,6 +852,13 @@ export function registerAppHandlers() {
   createTypedHandler(appContracts.createApp, async (_, params) => {
     const appPath = params.name;
     const fullAppPath = getDyadAppPath(appPath);
+
+    if (!isAppLocationAccessible(fullAppPath)) {
+      throw new Error(
+        `The path ${fullAppPath} is inaccessible. Please check your custom apps folder setting.`,
+      );
+    }
+
     if (fs.existsSync(fullAppPath)) {
       throw new DyadError(
         `App already exists at: ${fullAppPath}`,
@@ -926,6 +940,12 @@ export function registerAppHandlers() {
 
     const originalAppPath = getDyadAppPath(originalApp.path);
     const newAppPath = getDyadAppPath(newAppName);
+
+    if (!isAppLocationAccessible(newAppPath)) {
+      throw new Error(
+        `The path ${newAppPath} is inaccessible. Please check your custom apps folder setting.`,
+      );
+    }
 
     // 3. Copy the app folder
     try {
@@ -1702,6 +1722,12 @@ export function registerAppHandlers() {
       }
     }
     logger.log("all running apps stopped.");
+    // Determine the paths of all apps in the database so that we can delete them.
+    // We do the deletion last, so technically this is a TOCTOU race, but
+    // it allows us to do the deletion last after removing the database
+    const allAppPaths = await db.select({ appPath: apps.path }).from(apps);
+    // To resolve app paths later
+    const basePath = getDyadAppsBaseDirectory();
     logger.log("deleting database...");
     // 1. Drop the database by deleting the SQLite file
     const dbPath = getDatabasePath();
@@ -1723,12 +1749,26 @@ export function registerAppHandlers() {
       await fsPromises.unlink(settingsPath);
       logger.log(`Settings file deleted: ${settingsPath}`);
     }
+    // Reset base directory cache to default, because settings are gone anyway
+    invalidateDyadAppsBaseDirectoryCache();
     logger.log("settings deleted.");
     // 3. Remove all app files recursively
     // Doing this last because it's the most time-consuming and the least important
     // in terms of resetting the app state.
     logger.log("removing all app files...");
-    const dyadAppPath = getDyadAppPath(".");
+    // Delete any app paths that were in the database before we deleted it
+    for (const { appPath } of allAppPaths) {
+      // We don't rely on getDyadAppPath here because we've already cleared the settings
+      const resolvedAppPath = path.isAbsolute(appPath)
+        ? appPath
+        : path.join(basePath, appPath);
+      await fsPromises.rm(resolvedAppPath, {
+        recursive: true,
+        force: true,
+      });
+    }
+    const dyadAppPath = getDefaultDyadAppsDirectory();
+    // Delete the default `dyad-apps` folder, even if the user no longer uses it
     if (fs.existsSync(dyadAppPath)) {
       await fsPromises.rm(dyadAppPath, { recursive: true, force: true });
       // Recreate the base directory
