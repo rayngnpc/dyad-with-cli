@@ -20,7 +20,12 @@ import {
 import { formatDistanceToNow, format } from "date-fns";
 import { useVersions } from "@/hooks/useVersions";
 import { useAtomValue } from "jotai";
+import { selectAtom } from "jotai/utils";
 import { selectedAppIdAtom } from "@/atoms/appAtoms";
+import {
+  selectedChatIdAtom,
+  streamingPreviewByChatIdAtom,
+} from "@/atoms/chatAtoms";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import {
@@ -96,8 +101,27 @@ const ChatMessage = ({
     message.role === "assistant"
       ? stripCancelledResponseNotice(message.content)
       : "";
+  // Sidecar tool-input XML preview lives outside message.content. Subscribe
+  // to a per-chat boolean derived atom so non-last messages don't re-render
+  // every preview chunk — only on the boolean transition.
+  const selectedChatId = useAtomValue(selectedChatIdAtom);
+  const hasPreviewForChatAtom = useMemo(
+    () =>
+      selectAtom(streamingPreviewByChatIdAtom, (m) => {
+        if (selectedChatId == null) return false;
+        return (m.get(selectedChatId)?.length ?? 0) > 0;
+      }),
+    [selectedChatId],
+  );
+  const hasPreviewForChat = useAtomValue(hasPreviewForChatAtom);
+  const hasStreamingPreview =
+    message.role === "assistant" &&
+    isLastMessage &&
+    isStreaming &&
+    hasPreviewForChat;
   const hasAssistantText =
-    message.role === "assistant" && assistantTextContent.length > 0;
+    message.role === "assistant" &&
+    (assistantTextContent.length > 0 || hasStreamingPreview);
   //handle copy chat
   const { copyMessageContent, copied } = useCopyToClipboard();
   const handleCopyFormatted = async () => {
@@ -197,7 +221,11 @@ const ChatMessage = ({
               >
                 {message.role === "assistant" ? (
                   <>
-                    <DyadMarkdownParser content={assistantTextContent} />
+                    <DyadMarkdownParser
+                      content={assistantTextContent}
+                      messageId={message.id}
+                      showStreamingPreview={isLastMessage && isStreaming}
+                    />
                     {isLastMessage && isStreaming && (
                       <StreamingLoadingAnimation variant="streaming" />
                     )}

@@ -13,6 +13,7 @@ import {
   recentStreamChatIdsAtom,
   queuedMessagesByIdAtom,
   streamCompletedSuccessfullyByIdAtom,
+  streamingPreviewByChatIdAtom,
   queuePausedByIdAtom,
   publishChatCompletionEventAtom,
   type QueuedMessageItem,
@@ -24,6 +25,10 @@ import type { ChatResponseEnd, Chat } from "@/ipc/types";
 import { useChats } from "./useChats";
 import { useLoadApp } from "./useLoadApp";
 import { applyStreamingPatch } from "@/lib/applyStreamingPatch";
+import {
+  applyPreviewChunk,
+  clearPreviewForChat,
+} from "@/lib/streamingPreviewSync";
 import {
   triggerResync,
   syncChatFromDb,
@@ -112,6 +117,7 @@ export function useStreamChat({
   const setStreamCompletedSuccessfullyById = useSetAtom(
     streamCompletedSuccessfullyByIdAtom,
   );
+  const setStreamingPreviewByChatId = useSetAtom(streamingPreviewByChatIdAtom);
   const queuePausedById = useAtomValue(queuePausedByIdAtom);
   const setQueuePausedById = useSetAtom(queuePausedByIdAtom);
 
@@ -225,6 +231,14 @@ export function useStreamChat({
           : null;
       const targetAppId =
         appId ?? resolvedAppIdFromChat ?? selectedAppId ?? null;
+
+      const finalizeStream = (chatId: number) => {
+        pendingStreamChatIds.delete(chatId);
+        latestChunkByChatId.delete(chatId);
+        cancelAckTimer(chatId);
+        clearPreviewForChat(setStreamingPreviewByChatId, chatId);
+      };
+
       try {
         const cachedChat =
           requestedChatMode === null
@@ -250,6 +264,7 @@ export function useStreamChat({
               messages: updatedMessages,
               streamingMessageId,
               streamingPatch,
+              streamingPreview,
               chunkSeq,
               effectiveChatMode,
               chatModeFallbackReason,
@@ -277,6 +292,12 @@ export function useStreamChat({
                 });
                 hasIncrementedStreamCount = true;
               }
+
+              applyPreviewChunk(
+                setStreamingPreviewByChatId,
+                chatId,
+                streamingPreview,
+              );
 
               if (updatedMessages) {
                 // Full messages update (initial load, post-compaction, etc.)
@@ -313,9 +334,7 @@ export function useStreamChat({
               }
             },
             onEnd: (response: ChatResponseEnd) => {
-              pendingStreamChatIds.delete(chatId);
-              latestChunkByChatId.delete(chatId);
-              cancelAckTimer(chatId);
+              finalizeStream(chatId);
               void (async () => {
                 // Only mark as successful if NOT cancelled - wasCancelled flag is set
                 // by the backend when user cancels the stream
@@ -466,9 +485,7 @@ export function useStreamChat({
             },
             onError: ({ error: errorMessage, warningMessages }) => {
               // Remove from pending set now that stream ended with error
-              pendingStreamChatIds.delete(chatId);
-              latestChunkByChatId.delete(chatId);
-              cancelAckTimer(chatId);
+              finalizeStream(chatId);
 
               for (const warningMessage of warningMessages ?? []) {
                 showWarning(warningMessage);
@@ -503,9 +520,7 @@ export function useStreamChat({
         );
       } catch (error) {
         // Remove from pending set on exception
-        pendingStreamChatIds.delete(chatId);
-        latestChunkByChatId.delete(chatId);
-        cancelAckTimer(chatId);
+        finalizeStream(chatId);
 
         console.error("[CHAT] Exception during streaming setup:", error);
         setIsStreamingById((prev) => {
@@ -531,6 +546,7 @@ export function useStreamChat({
       setIsPreviewOpen,
       setStreamCompletedSuccessfullyById,
       setQueuePausedById,
+      setStreamingPreviewByChatId,
       selectedAppId,
       refetchUserBudget,
       settings,
