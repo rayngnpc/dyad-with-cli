@@ -384,7 +384,7 @@ export function createOpenCodeProvider(
         // Image attachments are written to temp files and passed via `-f`.
         const cwd = currentWorkingDirectory || process.cwd();
         const projectContext = buildCliProjectContext(cwd);
-        const extracted = extractCliUserMessageWithAttachments(prompt);
+        const extracted = await extractCliUserMessageWithAttachments(prompt);
         const { text: rawMessage, imagePaths, imageUrls } = extracted;
         if (imageUrls.length > 0) {
           // OpenCode `-f` is a local-file flag; remote URLs aren't supported.
@@ -523,7 +523,7 @@ export function createOpenCodeProvider(
         // Image attachments are written to temp files and passed via `-f`.
         const cwd = currentWorkingDirectory || process.cwd();
         const projectContext = buildCliProjectContext(cwd);
-        const extracted = extractCliUserMessageWithAttachments(prompt);
+        const extracted = await extractCliUserMessageWithAttachments(prompt);
         const { text: rawMessage, imagePaths, imageUrls } = extracted;
         if (imageUrls.length > 0) {
           // OpenCode `-f` is a local-file flag; remote URLs aren't supported.

@@ -593,9 +593,11 @@ function stripDataUrlPrefix(value: string): {
  * Write a single image part to a temp file and return the absolute path.
  * Returns `null` if the part shape is unrecognised or the write fails.
  */
-function writeImagePartToDisk(
+async function writeImagePartToDisk(
   part: Record<string, unknown>,
-): { kind: "path"; path: string } | { kind: "url"; url: string } | null {
+): Promise<
+  { kind: "path"; path: string } | { kind: "url"; url: string } | null
+> {
   // Two shapes to handle:
   //   1. AI SDK ImagePart:  { type: "image", image: <data|URL>, mediaType?: string }
   //   2. LanguageModelV2FilePart (image/*):
@@ -660,11 +662,50 @@ function writeImagePartToDisk(
 
   if (!buffer || buffer.length === 0) return null;
 
+  // Resize+re-encode large images so CLI-routed endpoints (especially
+  // GitHub Copilot, which caps payload around 1 MB) accept them.
+  // Annotator screenshots arrive as full-resolution PNGs that are
+  // routinely 1-5 MB; that's "Request Entity Too Large" territory.
+  //
+  // Strategy:
+  //   - Skip if buffer is already small (≤ MAX_BYTES).
+  //   - Resize longer dimension to fit MAX_DIM (1568 px).
+  //   - Re-encode as JPEG q85 (lossless PNG is overkill for visual
+  //     context; JPEG keeps files small without obvious quality loss).
+  //   - On any sharp failure, fall through to the original buffer.
+  const MAX_BYTES = 1_000_000;
+  const MAX_DIM = 1568;
+  let outBuffer = buffer;
+  let outExt = extensionForMediaType(resolvedMediaType);
+  if (buffer.length > MAX_BYTES) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const sharp = require("sharp");
+      const resized = await sharp(buffer)
+        .resize({
+          width: MAX_DIM,
+          height: MAX_DIM,
+          fit: "inside",
+          withoutEnlargement: true,
+        })
+        .jpeg({ quality: 85, mozjpeg: true })
+        .toBuffer();
+      logger.info(
+        `Resized CLI image attachment: ${buffer.length} -> ${resized.length} bytes`,
+      );
+      outBuffer = resized;
+      outExt = "jpg";
+    } catch (e) {
+      logger.warn(
+        `Image resize failed (${buffer.length} bytes), sending original: ${(e as Error).message}`,
+      );
+    }
+  }
+
   const dir = getCliAttachmentsDir();
-  const ext = extensionForMediaType(resolvedMediaType);
-  const filePath = path.join(dir, `${randomUUID()}.${ext}`);
+  const filePath = path.join(dir, `${randomUUID()}.${outExt}`);
   try {
-    fs.writeFileSync(filePath, buffer);
+    fs.writeFileSync(filePath, outBuffer);
     return { kind: "path", path: filePath };
   } catch (e) {
     logger.warn(
@@ -686,9 +727,9 @@ function writeImagePartToDisk(
  * Callers MUST call `cleanupCliAttachments(result.imagePaths)` once the
  * spawned process closes so we don't leak temp files.
  */
-export function extractCliUserMessageWithAttachments(
+export async function extractCliUserMessageWithAttachments(
   prompt: unknown,
-): ExtractedCliUserMessage {
+): Promise<ExtractedCliUserMessage> {
   // String prompts have no parts → no attachments possible.
   if (typeof prompt === "string") {
     return { text: prompt, imagePaths: [], imageUrls: [] };
@@ -723,7 +764,7 @@ export function extractCliUserMessageWithAttachments(
         }
         // Try to materialise image parts; ignore the rest silently so we
         // don't break tool-call results or other future parts.
-        const written = writeImagePartToDisk(part);
+        const written = await writeImagePartToDisk(part);
         if (!written) continue;
         if (written.kind === "path") imagePaths.push(written.path);
         else imageUrls.push(written.url);
@@ -774,8 +815,8 @@ export function extractCliUserMessageWithAttachments(
  * full function when you need image attachments — this one drops them
  * (and is kept for any caller that doesn't care).
  */
-export function extractCliUserMessage(prompt: unknown): string {
-  return extractCliUserMessageWithAttachments(prompt).text;
+export async function extractCliUserMessage(prompt: unknown): Promise<string> {
+  return (await extractCliUserMessageWithAttachments(prompt)).text;
 }
 
 /**

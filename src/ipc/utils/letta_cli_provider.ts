@@ -219,7 +219,7 @@ export function createLettaProvider(
         // can warn AND cleanup, instead of leaving stale temp files.
         const cwd = currentWorkingDirectory || process.cwd();
         const projectContext = buildCliProjectContext(cwd);
-        const extracted = extractCliUserMessageWithAttachments(prompt);
+        const extracted = await extractCliUserMessageWithAttachments(prompt);
         const { text: rawMessage, imagePaths, imageUrls } = extracted;
         if (imagePaths.length > 0 || imageUrls.length > 0) {
           logger.warn(
@@ -335,7 +335,7 @@ export function createLettaProvider(
         // can warn AND cleanup, instead of leaving stale temp files.
         const cwd = currentWorkingDirectory || process.cwd();
         const projectContext = buildCliProjectContext(cwd);
-        const extracted = extractCliUserMessageWithAttachments(prompt);
+        const extracted = await extractCliUserMessageWithAttachments(prompt);
         const { text: rawMessage, imagePaths, imageUrls } = extracted;
         if (imagePaths.length > 0 || imageUrls.length > 0) {
           logger.warn(

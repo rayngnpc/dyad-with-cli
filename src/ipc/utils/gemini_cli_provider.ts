@@ -354,7 +354,7 @@ export function createGeminiCliProvider(
         const historyBlock = shouldResumeSession
           ? ""
           : buildConversationHistorySection(prompt);
-        const extracted = extractCliUserMessageWithAttachments(prompt);
+        const extracted = await extractCliUserMessageWithAttachments(prompt);
         const { text: rawMessage, imagePaths, imageUrls } = extracted;
         const mentions = [...imagePaths, ...imageUrls]
           .map((p) => `@${p}`)
@@ -495,7 +495,7 @@ export function createGeminiCliProvider(
         const historyBlock = shouldResumeSession
           ? ""
           : buildConversationHistorySection(prompt);
-        const extracted = extractCliUserMessageWithAttachments(prompt);
+        const extracted = await extractCliUserMessageWithAttachments(prompt);
         const { text: rawMessage, imagePaths, imageUrls } = extracted;
         const mentions = [...imagePaths, ...imageUrls]
           .map((p) => `@${p}`)
