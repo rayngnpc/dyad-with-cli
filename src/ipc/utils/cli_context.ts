@@ -29,9 +29,16 @@ export function unwrapCliFileReadContent(raw: string): string {
   const match = raw.match(/<content>([\s\S]*?)<\/content>/);
   if (!match) return raw;
   const inner = match[1].trim();
+  // Strip per-line "N: " prefixes and known meta-trailers that some CLIs
+  // append (e.g. "(End of file - total 17 lines)" from OpenCode).
   const stripped = inner
     .split("\n")
     .map((line) => line.replace(/^\s*\d+:\s?/, ""))
+    .filter(
+      (line) =>
+        !/^\s*\(End of file\b[^)]*\)\s*$/i.test(line) &&
+        !/^\s*\(Showing\b[^)]*\)\s*$/i.test(line),
+    )
     .join("\n");
   return stripped;
 }
