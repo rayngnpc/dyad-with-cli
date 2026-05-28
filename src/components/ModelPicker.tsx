@@ -1001,46 +1001,96 @@ export function ModelPicker() {
                         </div>
                       </div>
                     ) : (
-                      openCodeModels.map((model: LocalModel) => {
-                        const isSelected =
-                          selectedModel.provider === "opencode" &&
-                          selectedModel.name === model.modelName;
-                        return (
-                          <DropdownMenuItem
-                            key={`opencode-${model.modelName}`}
-                            className={cn(
-                              "relative py-1.5",
-                              isSelected &&
-                                "bg-primary/8 before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-r-full before:bg-primary",
-                            )}
-                            onClick={() => {
-                              onModelSelect({
-                                name: model.modelName,
-                                provider: "opencode",
-                              });
-                              setOpen(false);
-                            }}
-                          >
-                            <div className="flex w-full items-center gap-2">
-                              <ProviderIcon
-                                providerId="opencode"
-                                apiName={model.modelName}
-                              />
-                              <div className="min-w-0 flex flex-col">
-                                <span className="text-[13px] leading-tight">
-                                  {model.displayName}
-                                </span>
-                                <span className="text-xs text-muted-foreground truncate">
-                                  {model.modelName}
-                                </span>
-                              </div>
-                              {isSelected && (
-                                <CheckIcon className="ml-auto size-3.5 text-primary shrink-0" />
-                              )}
-                            </div>
-                          </DropdownMenuItem>
+                      (() => {
+                        // Group OpenCode models by sub-provider parsed from
+                        // the model ID (e.g. "github-copilot/claude-haiku-4.5"
+                        // → "github-copilot"). The list is already sorted by
+                        // sub-provider in the handler.
+                        const subProviderLabels: Record<string, string> = {
+                          opencode: "opencode-zen",
+                        };
+                        const grouped = new Map<string, LocalModel[]>();
+                        for (const m of openCodeModels) {
+                          const sub = m.modelName.split("/")[0] || "other";
+                          const bucket = grouped.get(sub) ?? [];
+                          bucket.push(m);
+                          grouped.set(sub, bucket);
+                        }
+                        const entries = Array.from(grouped.entries()).sort(
+                          ([a], [b]) => a.localeCompare(b),
                         );
-                      })
+                        return entries.map(([sub, models]) => {
+                          const label = subProviderLabels[sub] ?? sub;
+                          const selectedInGroup = models.some(
+                            (m) =>
+                              selectedModel.provider === "opencode" &&
+                              selectedModel.name === m.modelName,
+                          );
+                          return (
+                            <DropdownMenuSub key={`opencode-sub-${sub}`}>
+                              <DropdownMenuSubTrigger
+                                className={cn(
+                                  "w-full font-normal",
+                                  selectedInGroup && "bg-primary/8",
+                                )}
+                              >
+                                <div className="flex flex-col items-start">
+                                  <span>{label}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {models.length} models
+                                  </span>
+                                </div>
+                              </DropdownMenuSubTrigger>
+                              <DropdownMenuSubContent
+                                className={cn("w-72", SCROLL_AREA_CLASS)}
+                              >
+                                <DropdownMenuLabel>{label}</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                {models.map((model) => {
+                                  const isSelected =
+                                    selectedModel.provider === "opencode" &&
+                                    selectedModel.name === model.modelName;
+                                  return (
+                                    <DropdownMenuItem
+                                      key={`opencode-${model.modelName}`}
+                                      className={cn(
+                                        "relative py-1.5",
+                                        isSelected &&
+                                          "bg-primary/8 before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-r-full before:bg-primary",
+                                      )}
+                                      onClick={() => {
+                                        onModelSelect({
+                                          name: model.modelName,
+                                          provider: "opencode",
+                                        });
+                                        setOpen(false);
+                                      }}
+                                    >
+                                      <div className="flex w-full items-center gap-2">
+                                        <ProviderIcon
+                                          providerId="opencode"
+                                          apiName={model.modelName}
+                                        />
+                                        <div className="min-w-0 flex flex-col">
+                                          <span className="text-[13px] leading-tight">
+                                            {model.displayName}
+                                          </span>
+                                          <span className="text-xs text-muted-foreground truncate">
+                                            {model.modelName}
+                                          </span>
+                                        </div>
+                                        {isSelected && (
+                                          <CheckIcon className="ml-auto size-3.5 text-primary shrink-0" />
+                                        )}
+                                      </div>
+                                    </DropdownMenuItem>
+                                  );
+                                })}
+                              </DropdownMenuSubContent>
+                            </DropdownMenuSub>
+                          );
+                        });
+                      })()
                     )}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>

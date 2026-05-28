@@ -86,36 +86,38 @@ interface OpenCodeModelInfo {
  */
 function parseOpenCodeModels(output: string): OpenCodeModelInfo[] {
   const models: OpenCodeModelInfo[] = [];
-  const lines = output.split("\n").filter(line => line.trim());
-  
+  const lines = output.split("\n").filter((line) => line.trim());
+
   for (const line of lines) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("opencode/")) {
-      // Skip opencode's built-in/test models
-      continue;
-    }
-    
+    if (!trimmed) continue;
+
     const parts = trimmed.split("/");
     if (parts.length >= 2) {
       const provider = parts[0];
       const model = parts.slice(1).join("/");
-      
-      // Create display name
-      const displayName = model
+
+      const prettyModel = model
         .replace(/-/g, " ")
         .replace(/\./g, " ")
         .split(" ")
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(" ");
-      
+
       models.push({
         provider,
-        model: trimmed, // Full model ID including provider
-        displayName: `${displayName} (${provider})`,
+        model: trimmed,
+        displayName: prettyModel,
       });
     }
   }
-  
+
+  // Sort by sub-provider, then by model name for clean grouping in the picker.
+  models.sort((a, b) => {
+    if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
+    return a.model.localeCompare(b.model);
+  });
+
   return models;
 }
 

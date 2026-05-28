@@ -386,6 +386,11 @@ const BaseUserSettingsFields = {
   mcpServerPort: z.number().int().min(1024).max(65535).optional(),
   mcpServerEnableWriteTools: z.boolean().optional(),
 
+  // OpenCode CLI — optional override for the agent passed via `--agent`.
+  // Empty → auto-detect (prefers stock `build` if primary, else first
+  // broad-permission primary). Set to e.g. "Sisyphus" to force a specific agent.
+  openCodeAgent: z.string().optional(),
+
   previewIdleTimeoutPolicy: z.enum(["default", "never"]).optional(),
 };
 

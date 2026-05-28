@@ -61,6 +61,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   enableMcpServer: false,
   mcpServerPort: undefined,
   mcpServerEnableWriteTools: undefined,
+  openCodeAgent: undefined,
   enablePnpmMinimumReleaseAgeWarning: false,
   previewIdleTimeoutPolicy: "default",
 };
