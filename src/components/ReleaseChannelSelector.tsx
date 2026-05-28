@@ -61,7 +61,11 @@ export function ReleaseChannelSelector() {
           onValueChange={(v) => v && handleReleaseChannelChange(v)}
         >
           <SelectTrigger className="w-32" id="release-channel">
-            <SelectValue />
+            <SelectValue>
+              {(value: string | null) =>
+                value === "beta" ? t("general.beta") : t("general.stable")
+              }
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="stable">{t("general.stable")}</SelectItem>

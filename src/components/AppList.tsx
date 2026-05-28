@@ -1,23 +1,22 @@
 import { useNavigate } from "@tanstack/react-router";
-import { PlusCircle, Search } from "lucide-react";
-import { useAtom, useSetAtom } from "jotai";
+import { PlusCircle, Search, Star } from "lucide-react";
+import { useAtomValue } from "jotai";
 import { selectedAppIdAtom } from "@/atoms/appAtoms";
 import {
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarMenu,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { selectedChatIdAtom } from "@/atoms/chatAtoms";
 import { useLoadApps } from "@/hooks/useLoadApps";
+import { useOpenApp } from "@/hooks/useOpenApp";
 import { useMemo, useState } from "react";
 import { AppSearchDialog } from "./AppSearchDialog";
 import { AppItem } from "./appItem";
 export function AppList({ show }: { show?: boolean }) {
   const navigate = useNavigate();
-  const [selectedAppId, setSelectedAppId] = useAtom(selectedAppIdAtom);
-  const setSelectedChatId = useSetAtom(selectedChatIdAtom);
+  const selectedAppId = useAtomValue(selectedAppIdAtom);
+  const openApp = useOpenApp();
   const { apps, loading, error } = useLoadApps();
   // search dialog state
   const [isSearchDialogOpen, setIsSearchDialogOpen] = useState(false);
@@ -49,13 +48,8 @@ export function AppList({ show }: { show?: boolean }) {
   }
 
   const handleAppClick = (id: number) => {
-    setSelectedAppId(id);
-    setSelectedChatId(null);
     setIsSearchDialogOpen(false);
-    navigate({
-      to: "/",
-      search: { appId: id },
-    });
+    openApp(id);
   };
 
   const handleNewApp = () => {
@@ -69,26 +63,28 @@ export function AppList({ show }: { show?: boolean }) {
         className="overflow-y-auto h-[calc(100vh-112px)]"
         data-testid="app-list-container"
       >
-        <SidebarGroupLabel>Your Apps</SidebarGroupLabel>
         <SidebarGroupContent>
-          <div className="flex flex-col space-y-2">
-            <Button
-              onClick={handleNewApp}
-              variant="outline"
-              className="flex items-center justify-start gap-2 mx-2 py-2"
-            >
-              <PlusCircle size={16} />
-              <span>New App</span>
-            </Button>
-            <Button
-              onClick={() => setIsSearchDialogOpen(!isSearchDialogOpen)}
-              variant="outline"
-              className="flex items-center justify-start gap-2 mx-2 py-3"
-              data-testid="search-apps-button"
-            >
-              <Search size={16} />
-              <span>Search Apps</span>
-            </Button>
+          <div className="flex flex-col space-y-3">
+            <div className="mx-2 flex items-center gap-2">
+              <Button
+                onClick={handleNewApp}
+                variant="outline"
+                className="flex flex-1 items-center justify-start gap-2 py-3"
+              >
+                <PlusCircle size={16} />
+                <span>New App</span>
+              </Button>
+              <Button
+                onClick={() => setIsSearchDialogOpen(!isSearchDialogOpen)}
+                variant="outline"
+                className="flex shrink-0 items-center justify-center py-3 px-3"
+                title="Search Apps"
+                aria-label="Search Apps"
+                data-testid="search-apps-button"
+              >
+                <Search size={16} />
+              </Button>
+            </div>
 
             {loading ? (
               <div className="py-2 px-4 text-sm text-gray-500">
@@ -104,10 +100,13 @@ export function AppList({ show }: { show?: boolean }) {
               </div>
             ) : (
               <SidebarMenu className="space-y-1" data-testid="app-list">
-                <SidebarGroupLabel>Favorite apps</SidebarGroupLabel>
+                <div className="px-3 pb-1 text-xs font-medium text-muted-foreground">
+                  Favorite apps
+                </div>
                 {favoriteApps.length === 0 ? (
-                  <div className="px-4 text-xs text-gray-500 italic">
-                    Star an app from its details page to pin it here
+                  <div className="mx-2 mb-2 flex items-center gap-2 rounded-md border border-dashed border-sidebar-border px-3 py-3 text-xs text-muted-foreground">
+                    <Star size={14} className="shrink-0" />
+                    <span>Star an app to pin it here</span>
                   </div>
                 ) : (
                   favoriteApps.map((app) => (
@@ -119,7 +118,9 @@ export function AppList({ show }: { show?: boolean }) {
                     />
                   ))
                 )}
-                <SidebarGroupLabel>Other apps</SidebarGroupLabel>
+                <div className="px-3 pb-1 pt-2 text-xs font-medium text-muted-foreground">
+                  Other apps
+                </div>
                 {nonFavoriteApps.map((app) => (
                   <AppItem
                     key={app.id}

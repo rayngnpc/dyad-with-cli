@@ -116,3 +116,16 @@ storybook-static/
 
 # Letta CLI local config
 .letta/
+
+# MCP development docs (kept outside the repo)
+MCP_MASTER.md
+MCP_TEAM_HANDOFF.md
+implementationplan.md
+
+# Private AI session notes — contain local paths and dev-environment details
+HANDOFF.md
+AI_HANDOFF.md
+Annotation/
+
+# Eval framework — run results
+eval-results/

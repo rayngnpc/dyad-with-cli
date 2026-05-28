@@ -1,4 +1,6 @@
 import path from "node:path";
+import { DyadError, DyadErrorKind } from "@/errors/dyad_error";
+import { normalizePath } from "../../../shared/normalizePath";
 
 /**
  * If filePath is an absolute path that lives inside basePath, converts it to
@@ -34,35 +36,42 @@ export function normalizeToRelativePath(
  * @throws Error if the resulting path would be outside the base directory
  */
 export function safeJoin(basePath: string, ...paths: string[]): string {
+  // Normalize backslashes to forward slashes for cross-platform consistency
+  const normalizedPaths = paths.map((p) => normalizePath(p));
+
   // Check if any of the path segments are absolute paths (which would be unsafe)
-  for (const pathSegment of paths) {
+  for (const pathSegment of normalizedPaths) {
     if (path.isAbsolute(pathSegment)) {
-      throw new Error(
+      throw new DyadError(
         `Unsafe path: joining "${paths.join(", ")}" with base "${basePath}" would escape the base directory`,
+        DyadErrorKind.Validation,
       );
     }
     // Also check for home directory shortcuts which are effectively absolute
     if (pathSegment.startsWith("~/")) {
-      throw new Error(
+      throw new DyadError(
         `Unsafe path: joining "${paths.join(", ")}" with base "${basePath}" would escape the base directory`,
+        DyadErrorKind.Validation,
       );
     }
     // Check for Windows-style absolute paths (C:\, D:\, etc.)
     if (/^[A-Za-z]:[/\\]/.test(pathSegment)) {
-      throw new Error(
+      throw new DyadError(
         `Unsafe path: joining "${paths.join(", ")}" with base "${basePath}" would escape the base directory`,
+        DyadErrorKind.Validation,
       );
     }
     // Check for UNC paths (\\server\share)
     if (pathSegment.startsWith("\\\\")) {
-      throw new Error(
+      throw new DyadError(
         `Unsafe path: joining "${paths.join(", ")}" with base "${basePath}" would escape the base directory`,
+        DyadErrorKind.Validation,
       );
     }
   }
 
   // Join all the paths
-  const joinedPath = path.join(basePath, ...paths);
+  const joinedPath = path.join(basePath, ...normalizedPaths);
 
   // Resolve both paths to absolute paths to handle any ".." components
   const resolvedBasePath = path.resolve(basePath);
@@ -74,8 +83,9 @@ export function safeJoin(basePath: string, ...paths: string[]): string {
 
   // If relativePath starts with ".." or is absolute, then resolvedJoinedPath is outside basePath
   if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
-    throw new Error(
+    throw new DyadError(
       `Unsafe path: joining "${paths.join(", ")}" with base "${basePath}" would escape the base directory`,
+      DyadErrorKind.Validation,
     );
   }
 

@@ -18,7 +18,8 @@ export function useOpenCodeModels() {
   const loadModels = useCallback(async () => {
     setLoading(true);
     try {
-      const { models: modelList } = await ipc.languageModel.listOpenCodeModels();
+      const { models: modelList } =
+        await ipc.languageModel.listOpenCodeModels();
       setModels(modelList);
       setError(null);
 

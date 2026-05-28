@@ -1,7 +1,9 @@
 import { ipcMain } from "electron";
 import log from "electron-log";
 import { execSync } from "node:child_process";
-import type { LocalModelListResponse, LocalModel } from "../ipc_types";
+import type { LocalModel } from "../types";
+
+type LocalModelListResponse = { models: LocalModel[] };
 
 const logger = log.scope("opencode_handler");
 
@@ -15,7 +17,7 @@ export function getOpenCodePath(): string {
       {
         encoding: "utf-8",
         shell: "/bin/bash",
-      }
+      },
     ).trim();
     if (resolved) return resolved;
   } catch {
@@ -84,36 +86,38 @@ interface OpenCodeModelInfo {
  */
 function parseOpenCodeModels(output: string): OpenCodeModelInfo[] {
   const models: OpenCodeModelInfo[] = [];
-  const lines = output.split("\n").filter(line => line.trim());
-  
+  const lines = output.split("\n").filter((line) => line.trim());
+
   for (const line of lines) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("opencode/")) {
-      // Skip opencode's built-in/test models
-      continue;
-    }
-    
+    if (!trimmed) continue;
+
     const parts = trimmed.split("/");
     if (parts.length >= 2) {
       const provider = parts[0];
       const model = parts.slice(1).join("/");
-      
-      // Create display name
-      const displayName = model
+
+      const prettyModel = model
         .replace(/-/g, " ")
         .replace(/\./g, " ")
         .split(" ")
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(" ");
-      
+
       models.push({
         provider,
-        model: trimmed, // Full model ID including provider
-        displayName: `${displayName} (${provider})`,
+        model: trimmed,
+        displayName: prettyModel,
       });
     }
   }
-  
+
+  // Sort by sub-provider, then by model name for clean grouping in the picker.
+  models.sort((a, b) => {
+    if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
+    return a.model.localeCompare(b.model);
+  });
+
   return models;
 }
 
@@ -123,7 +127,7 @@ function parseOpenCodeModels(output: string): OpenCodeModelInfo[] {
 export async function fetchOpenCodeModels(): Promise<LocalModelListResponse> {
   if (!isOpenCodeAvailable()) {
     throw new Error(
-      "OpenCode CLI is not installed or not found in PATH. Install it from: https://opencode.ai"
+      "OpenCode CLI is not installed or not found in PATH. Install it from: https://opencode.ai",
     );
   }
 
@@ -133,10 +137,10 @@ export async function fetchOpenCodeModels(): Promise<LocalModelListResponse> {
   try {
     const opencodePath = getOpenCodePath();
     const output = execSync(`${opencodePath} models`, { encoding: "utf-8" });
-    
+
     const parsedModels = parseOpenCodeModels(output);
-    
-    const localModels: LocalModel[] = parsedModels.map(m => ({
+
+    const localModels: LocalModel[] = parsedModels.map((m) => ({
       modelName: m.model,
       displayName: m.displayName,
       provider: "opencode",
@@ -146,7 +150,9 @@ export async function fetchOpenCodeModels(): Promise<LocalModelListResponse> {
     return { models: localModels };
   } catch (error) {
     logger.error("Failed to fetch OpenCode models:", error);
-    throw new Error("Failed to fetch OpenCode models. Is OpenCode CLI configured?");
+    throw new Error(
+      "Failed to fetch OpenCode models. Is OpenCode CLI configured?",
+    );
   }
 }
 
@@ -158,20 +164,20 @@ export function registerOpenCodeHandlers() {
     "local-models:list-opencode",
     async (): Promise<LocalModelListResponse> => {
       return fetchOpenCodeModels();
-    }
+    },
   );
 
   ipcMain.handle(
     "local-models:opencode-available",
     async (): Promise<boolean> => {
       return isOpenCodeAvailable();
-    }
+    },
   );
 
   ipcMain.handle(
     "local-models:opencode-version",
     async (): Promise<string | null> => {
       return getOpenCodeVersion();
-    }
+    },
   );
 }

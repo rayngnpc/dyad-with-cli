@@ -124,7 +124,16 @@ function ToolConsentRow({
           onValueChange={(v) => onConsentChange(v as AgentToolConsent)}
         >
           <SelectTrigger className="w-[140px] h-8">
-            <SelectValue />
+            <SelectValue>
+              {(value: string | null) => {
+                const labels: Record<string, string> = {
+                  ask: t("agentPermissions.ask"),
+                  always: t("agentPermissions.alwaysAllow"),
+                  never: t("agentPermissions.neverAllow"),
+                };
+                return value ? (labels[value] ?? value) : "";
+              }}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="ask">{t("agentPermissions.ask")}</SelectItem>

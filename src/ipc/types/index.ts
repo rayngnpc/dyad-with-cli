@@ -35,6 +35,7 @@ export { mcpContracts, mcpEvents } from "./mcp";
 export { vercelContracts } from "./vercel";
 export { supabaseContracts } from "./supabase";
 export { neonContracts } from "./neon";
+export { migrationContracts } from "./migration";
 export { systemContracts, systemEvents } from "./system";
 export { versionContracts } from "./version";
 export { languageModelContracts } from "./language-model";
@@ -51,6 +52,10 @@ export { securityContracts } from "./security";
 export { miscContracts, miscEvents } from "./misc";
 export { freeAgentQuotaContracts } from "./free_agent_quota";
 export { audioContracts } from "./audio";
+export { mcpServerContracts, mcpServerEvents } from "./mcp_server";
+export { mediaContracts } from "./media";
+export { imageGenerationContracts } from "./image_generation";
+export { appBlueprintContracts, appBlueprintEvents } from "./app_blueprint";
 
 // =============================================================================
 // Client Exports
@@ -65,6 +70,7 @@ export { mcpClient, mcpEventClient } from "./mcp";
 export { vercelClient } from "./vercel";
 export { supabaseClient } from "./supabase";
 export { neonClient } from "./neon";
+export { migrationClient } from "./migration";
 export { systemClient, systemEventClient } from "./system";
 export { versionClient } from "./version";
 export { languageModelClient } from "./language-model";
@@ -81,6 +87,10 @@ export { securityClient } from "./security";
 export { miscClient, miscEventClient } from "./misc";
 export { freeAgentQuotaClient } from "./free_agent_quota";
 export { audioClient } from "./audio";
+export { mcpServerClient, mcpServerEventClient } from "./mcp_server";
+export { mediaClient } from "./media";
+export { imageGenerationClient } from "./image_generation";
+export { appBlueprintClient, appBlueprintEventClient } from "./app_blueprint";
 
 // =============================================================================
 // Type Exports
@@ -118,10 +128,12 @@ export type {
   FileAttachment,
   ChatAttachment,
   ChatStreamParams,
+  ChatResponseChunk,
   ChatResponseEnd,
   UpdateChatParams,
   TokenCountParams,
   TokenCountResult,
+  StreamingPatch,
 } from "./chat";
 
 // Agent types
@@ -194,11 +206,20 @@ export type {
 // Neon types
 export type {
   NeonProject,
+  NeonProjectListItem,
   NeonBranch,
   CreateNeonProjectParams,
   GetNeonProjectParams,
   GetNeonProjectResponse,
+  ListNeonProjectsResponse,
+  NeonAuthEmailAndPasswordConfig,
 } from "./neon";
+
+// Migration types
+export type {
+  MigrationMigrateParams,
+  MigrationMigrateResponse,
+} from "./migration";
 
 // System types
 export type {
@@ -296,6 +317,32 @@ export type { FreeAgentQuotaStatus } from "./free_agent_quota";
 // Pro types
 export type { TranscribeAudioParams, TranscribeAudioResult } from "./audio";
 
+// Media types
+export type {
+  MediaFile,
+  RenameMediaFileParams,
+  DeleteMediaFileParams,
+  MoveMediaFileParams,
+} from "./media";
+
+// Image generation types
+export type {
+  ImageThemeMode,
+  GenerateImageParams,
+  GenerateImageResponse,
+} from "./image_generation";
+
+// App blueprint types
+export type {
+  AppBlueprintVisual,
+  AppBlueprintData,
+  AppBlueprintUpdatePayload,
+  AppBlueprintVisualsUpdatePayload,
+  AppBlueprintApprovePayload,
+  AppBlueprintFieldEditPayload,
+  AppBlueprintApprovedPayload,
+} from "./app_blueprint";
+
 // =============================================================================
 // Schema Exports (for validation in handlers/components)
 // =============================================================================
@@ -328,31 +375,36 @@ export { UserBudgetInfoSchema } from "./system";
 // Aggregated IPC Client
 // =============================================================================
 
-import { settingsClient } from "./settings";
-import { appClient } from "./app";
-import { chatClient, chatStreamClient } from "./chat";
 import { agentClient, agentEventClient } from "./agent";
-import { githubClient, gitClient, githubEventClient } from "./github";
-import { mcpClient, mcpEventClient } from "./mcp";
-import { vercelClient } from "./vercel";
-import { supabaseClient } from "./supabase";
-import { neonClient } from "./neon";
-import { systemClient, systemEventClient } from "./system";
-import { versionClient } from "./version";
-import { languageModelClient } from "./language-model";
-import { promptClient } from "./prompts";
-import { templateClient } from "./templates";
-import { proposalClient } from "./proposals";
-import { importClient } from "./import";
-import { helpClient, helpStreamClient } from "./help";
-import { capacitorClient } from "./capacitor";
-import { contextClient } from "./context";
-import { upgradeClient } from "./upgrade";
-import { visualEditingClient } from "./visual-editing";
-import { securityClient } from "./security";
-import { miscClient, miscEventClient } from "./misc";
-import { freeAgentQuotaClient } from "./free_agent_quota";
+import { appClient } from "./app";
 import { audioClient } from "./audio";
+import { capacitorClient } from "./capacitor";
+import { chatClient, chatStreamClient } from "./chat";
+import { contextClient } from "./context";
+import { freeAgentQuotaClient } from "./free_agent_quota";
+import { gitClient, githubClient, githubEventClient } from "./github";
+import { helpClient, helpStreamClient } from "./help";
+import { importClient } from "./import";
+import { languageModelClient } from "./language-model";
+import { mcpClient, mcpEventClient } from "./mcp";
+import { mcpServerClient, mcpServerEventClient } from "./mcp_server";
+import { mediaClient } from "./media";
+import { imageGenerationClient } from "./image_generation";
+import { appBlueprintClient, appBlueprintEventClient } from "./app_blueprint";
+import { migrationClient } from "./migration";
+import { miscClient, miscEventClient } from "./misc";
+import { neonClient } from "./neon";
+import { promptClient } from "./prompts";
+import { proposalClient } from "./proposals";
+import { securityClient } from "./security";
+import { settingsClient } from "./settings";
+import { supabaseClient } from "./supabase";
+import { systemClient, systemEventClient } from "./system";
+import { templateClient } from "./templates";
+import { upgradeClient } from "./upgrade";
+import { vercelClient } from "./vercel";
+import { versionClient } from "./version";
+import { visualEditingClient } from "./visual-editing";
 
 /**
  * Unified IPC client with all domains organized by namespace.
@@ -391,6 +443,7 @@ export const ipc = {
   vercel: vercelClient,
   supabase: supabaseClient,
   neon: neonClient,
+  migration: migrationClient,
 
   // Features
   system: systemClient,
@@ -409,6 +462,10 @@ export const ipc = {
   misc: miscClient,
   freeAgentQuota: freeAgentQuotaClient,
   audio: audioClient,
+  mcpServer: mcpServerClient,
+  media: mediaClient,
+  imageGeneration: imageGenerationClient,
+  appBlueprint: appBlueprintClient,
 
   // Event clients for main->renderer pub/sub
   events: {
@@ -417,5 +474,7 @@ export const ipc = {
     mcp: mcpEventClient,
     system: systemEventClient,
     misc: miscEventClient,
+    mcpServer: mcpServerEventClient,
+    appBlueprint: appBlueprintEventClient,
   },
 } as const;

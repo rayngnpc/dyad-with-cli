@@ -18,7 +18,8 @@ export function useGeminiCliModels() {
   const loadModels = useCallback(async () => {
     setLoading(true);
     try {
-      const { models: modelList } = await ipc.languageModel.listGeminiCliModels();
+      const { models: modelList } =
+        await ipc.languageModel.listGeminiCliModels();
       setModels(modelList);
       setError(null);
 

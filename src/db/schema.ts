@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
 import { relations } from "drizzle-orm";
 import type { ModelMessage } from "ai";
+import type { StoredChatMode } from "@/lib/schemas";
 
 export const AI_MESSAGES_SDK_VERSION = "ai@v6" as const;
 
@@ -53,6 +54,7 @@ export const apps = sqliteTable("apps", {
   neonProjectId: text("neon_project_id"),
   neonDevelopmentBranchId: text("neon_development_branch_id"),
   neonPreviewBranchId: text("neon_preview_branch_id"),
+  neonActiveBranchId: text("neon_active_branch_id"),
   vercelProjectId: text("vercel_project_id"),
   vercelProjectName: text("vercel_project_name"),
   vercelTeamId: text("vercel_team_id"),
@@ -65,6 +67,9 @@ export const apps = sqliteTable("apps", {
     .default(sql`0`),
   // Theme ID for design system theming (null means "no theme")
   themeId: text("theme_id"),
+  needsAppBlueprint: integer("needs_app_blueprint", { mode: "boolean" })
+    .notNull()
+    .default(sql`0`),
 });
 
 export const chats = sqliteTable("chats", {
@@ -81,6 +86,7 @@ export const chats = sqliteTable("chats", {
   compactedAt: integer("compacted_at", { mode: "timestamp" }),
   compactionBackupPath: text("compaction_backup_path"),
   pendingCompaction: integer("pending_compaction", { mode: "boolean" }),
+  chatMode: text("chat_mode").$type<StoredChatMode | null>(),
 });
 
 export const messages = sqliteTable("messages", {

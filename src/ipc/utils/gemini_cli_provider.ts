@@ -8,7 +8,8 @@ import {
 } from "../handlers/local_model_gemini_cli_handler";
 import {
   buildCliProjectContext,
-  extractCliUserMessage,
+  cleanupCliAttachments,
+  extractCliUserMessageWithAttachments,
 } from "./cli_context";
 
 const logger = log.scope("gemini_cli_provider");
@@ -296,12 +297,22 @@ export function createGeminiCliProvider(
 
         // Extract the user message, stripping Dyad's system prompt
         // (which contains conflicting <dyad-write> tag instructions)
+        // and pulling out any image attachments. Gemini CLI accepts
+        // images inline via @-mention syntax (`@<absolute-path>`) inside
+        // the -p prompt; remote URLs work the same way.
         const cwd = currentWorkingDirectory || process.cwd();
         const projectContext = buildCliProjectContext(cwd);
-        const rawMessage = extractCliUserMessage(prompt);
-        const userMessage = projectContext
-          ? `${projectContext}\n\n${rawMessage}`
+        const extracted = extractCliUserMessageWithAttachments(prompt);
+        const { text: rawMessage, imagePaths, imageUrls } = extracted;
+        const mentions = [...imagePaths, ...imageUrls]
+          .map((p) => `@${p}`)
+          .join("\n");
+        const promptWithImages = mentions
+          ? `${mentions}\n\n${rawMessage}`
           : rawMessage;
+        const userMessage = projectContext
+          ? `${projectContext}\n\n${promptWithImages}`
+          : promptWithImages;
 
         return new Promise((resolve, reject) => {
           const geminiPath = getGeminiCliPath();
@@ -328,12 +339,13 @@ export function createGeminiCliProvider(
           }
 
           logger.info(
-            `Gemini CLI doGenerate with model: ${effectiveModel}, cwd: ${currentWorkingDirectory || process.cwd()}`,
+            `Gemini CLI doGenerate with model: ${effectiveModel}, cwd: ${currentWorkingDirectory || process.cwd()}, attachments: ${imagePaths.length} file(s), ${imageUrls.length} URL(s)`,
           );
 
           const geminiProcess = spawn(geminiPath, args, {
             stdio: ["ignore", "pipe", "pipe"],
             cwd: currentWorkingDirectory || process.cwd(),
+            env: { ...process.env, GEMINI_CLI_TRUST_WORKSPACE: "true" },
           });
 
           let output = "";
@@ -342,6 +354,7 @@ export function createGeminiCliProvider(
             abortSignal.addEventListener("abort", () => {
               geminiProcess.kill("SIGTERM");
               reject(new Error("Aborted"));
+              // NOTE: don't cleanup here — the `close` handler will run.
             });
           }
 
@@ -349,9 +362,13 @@ export function createGeminiCliProvider(
             output += data.toString();
           });
 
-          geminiProcess.on("error", reject);
+          geminiProcess.on("error", (err) => {
+            cleanupCliAttachments(imagePaths);
+            reject(err);
+          });
 
           geminiProcess.on("close", (code) => {
+            cleanupCliAttachments(imagePaths);
             if (code !== 0) {
               reject(new Error(`Gemini CLI exited with code ${code}`));
               return;
@@ -409,13 +426,22 @@ export function createGeminiCliProvider(
       async doStream(options): Promise<any> {
         const { prompt, abortSignal } = options;
 
-        // Extract the user message, stripping Dyad's system prompt
+        // Extract the user message, stripping Dyad's system prompt, and
+        // pull out any image attachments. Gemini CLI accepts images via
+        // @-mention inside the -p prompt — both local paths and URLs.
         const cwd = currentWorkingDirectory || process.cwd();
         const projectContext = buildCliProjectContext(cwd);
-        const rawMessage = extractCliUserMessage(prompt);
-        const userMessage = projectContext
-          ? `${projectContext}\n\n${rawMessage}`
+        const extracted = extractCliUserMessageWithAttachments(prompt);
+        const { text: rawMessage, imagePaths, imageUrls } = extracted;
+        const mentions = [...imagePaths, ...imageUrls]
+          .map((p) => `@${p}`)
+          .join("\n");
+        const promptWithImages = mentions
+          ? `${mentions}\n\n${rawMessage}`
           : rawMessage;
+        const userMessage = projectContext
+          ? `${projectContext}\n\n${promptWithImages}`
+          : promptWithImages;
 
         const geminiPath = getGeminiCliPath();
         const args = [
@@ -441,12 +467,13 @@ export function createGeminiCliProvider(
         }
 
         logger.info(
-          `Gemini CLI doStream with model: ${effectiveModel}, cwd: ${currentWorkingDirectory || process.cwd()}`,
+          `Gemini CLI doStream with model: ${effectiveModel}, cwd: ${currentWorkingDirectory || process.cwd()}, attachments: ${imagePaths.length} file(s), ${imageUrls.length} URL(s)`,
         );
 
         const geminiProcess = spawn(geminiPath, args, {
           stdio: ["ignore", "pipe", "pipe"],
           cwd: currentWorkingDirectory || process.cwd(),
+          env: { ...process.env, GEMINI_CLI_TRUST_WORKSPACE: "true" },
         });
 
         if (abortSignal) {
@@ -827,6 +854,7 @@ export function createGeminiCliProvider(
             });
 
             geminiProcess.on("error", (error) => {
+              cleanupCliAttachments(imagePaths);
               if (!streamClosed) {
                 streamClosed = true;
                 controller.error(error);
@@ -834,6 +862,7 @@ export function createGeminiCliProvider(
             });
 
             geminiProcess.on("close", (code, signal) => {
+              cleanupCliAttachments(imagePaths);
               logger.info(
                 `Gemini CLI process closed - code: ${code}, signal: ${signal}, streamClosed: ${streamClosed}, bufferLength: ${buffer.length}`,
               );

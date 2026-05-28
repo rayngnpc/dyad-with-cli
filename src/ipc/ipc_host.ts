@@ -4,6 +4,7 @@ import { registerChatStreamHandlers } from "./handlers/chat_stream_handlers";
 import { registerSettingsHandlers } from "./handlers/settings_handlers";
 import { registerShellHandlers } from "./handlers/shell_handler";
 import { registerDependencyHandlers } from "./handlers/dependency_handlers";
+import { registerCustomAppsFolderHandlers } from "./handlers/custom_apps_folder_handlers";
 import { registerGithubHandlers } from "./handlers/github_handlers";
 import { registerGithubBranchHandlers } from "./handlers/git_branch_handlers";
 import { registerVercelHandlers } from "./handlers/vercel_handlers";
@@ -30,6 +31,7 @@ import { registerAppEnvVarsHandlers } from "./handlers/app_env_vars_handlers";
 import { registerTemplateHandlers } from "./handlers/template_handlers";
 import { registerThemesHandlers } from "../pro/main/ipc/handlers/themes_handlers";
 import { registerPortalHandlers } from "./handlers/portal_handlers";
+import { registerMigrationHandlers } from "./handlers/migration_handlers";
 import { registerPromptHandlers } from "./handlers/prompt_handlers";
 import { registerHelpBotHandlers } from "./handlers/help_bot_handlers";
 import { registerMcpHandlers } from "./handlers/mcp_handlers";
@@ -38,6 +40,12 @@ import { registerVisualEditingHandlers } from "../pro/main/ipc/handlers/visual_e
 import { registerAgentToolHandlers } from "../pro/main/ipc/handlers/local_agent/agent_tool_handlers";
 import { registerFreeAgentQuotaHandlers } from "./handlers/free_agent_quota_handlers";
 import { registerPlanHandlers } from "./handlers/plan_handlers";
+import { registerMcpServerHandlers } from "./handlers/mcp_server_handlers";
+import { registerIntegrationHandlers } from "./handlers/integration_handlers";
+import { registerMediaHandlers } from "./handlers/media_handlers";
+import { registerImageGenerationHandlers } from "./handlers/image_generation_handlers";
+import { registerMiscHandlers } from "./handlers/misc_handlers";
+import { registerAppBlueprintHandlers } from "./handlers/app_blueprint_handlers";
 
 export function registerIpcHandlers() {
   // Register all IPC handlers by category
@@ -47,6 +55,7 @@ export function registerIpcHandlers() {
   registerSettingsHandlers();
   registerShellHandlers();
   registerDependencyHandlers();
+  registerCustomAppsFolderHandlers();
   registerGithubHandlers();
   registerGithubBranchHandlers();
   registerVercelHandlers();
@@ -73,6 +82,7 @@ export function registerIpcHandlers() {
   registerTemplateHandlers();
   registerThemesHandlers();
   registerPortalHandlers();
+  registerMigrationHandlers();
   registerPromptHandlers();
   registerHelpBotHandlers();
   registerMcpHandlers();
@@ -81,4 +91,10 @@ export function registerIpcHandlers() {
   registerAgentToolHandlers();
   registerFreeAgentQuotaHandlers();
   registerPlanHandlers();
+  registerMcpServerHandlers();
+  registerIntegrationHandlers();
+  registerMediaHandlers();
+  registerImageGenerationHandlers();
+  registerMiscHandlers();
+  registerAppBlueprintHandlers();
 }

@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import path from "node:path";
 import type { LanguageModelV2 } from "@ai-sdk/provider";
 import log from "electron-log";
 import {
@@ -7,10 +8,57 @@ import {
 } from "../handlers/local_model_letta_handler";
 import {
   buildCliProjectContext,
-  extractCliUserMessage,
+  cleanupCliAttachments,
+  extractCliUserMessageWithAttachments,
 } from "./cli_context";
 
+/*
+ * NOTE on Letta image attachments:
+ *
+ * As of letta-code v0.x there is no headless flag for attaching binary
+ * images to a `-p` prompt (checked via `letta --help`). When the caller
+ * provides image parts we extract the text, log a warning, and drop the
+ * images (cleaning up any temp files we materialised so they don't
+ * leak). If Letta later gains an attachment flag, wire it up the same
+ * way OpenCode does with `-f`.
+ */
+
 const logger = log.scope("letta_cli_provider");
+
+function toRelativePath(filePath: string, cwd: string): string {
+  if (path.isAbsolute(filePath) && filePath.startsWith(cwd)) {
+    const rel = path.relative(cwd, filePath);
+    return rel || filePath;
+  }
+  return filePath;
+}
+
+function escapeXmlAttr(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function truncateOutput(output: string, maxLength: number): string {
+  if (!output) return "";
+  const trimmed = output.trim();
+  if (trimmed.length <= maxLength) return trimmed;
+  return `${trimmed.substring(0, maxLength)}\n... (truncated)`;
+}
+
+/** Pull a string field from arguments, preferring `primary` then `fallback`. */
+function strArg(
+  args: Record<string, unknown>,
+  primary: string,
+  fallback?: string,
+): string | undefined {
+  if (typeof args[primary] === "string") return args[primary] as string;
+  if (fallback && typeof args[fallback] === "string")
+    return args[fallback] as string;
+  return undefined;
+}
 
 // Generate unique IDs for stream parts
 let idCounter = 0;
@@ -128,15 +176,6 @@ export interface LettaProviderOptions {
 export type LettaProvider = (modelId: string) => LanguageModelV2;
 
 /**
- * Format tool output for display - truncate if too long
- */
-function formatToolOutput(output: string | undefined, maxLength = 500): string {
-  if (!output) return "";
-  if (output.length <= maxLength) return output;
-  return `${output.slice(0, maxLength)}\n... (truncated)`;
-}
-
-/**
  * Creates a Letta CLI provider that implements the LanguageModelV2 interface
  */
 export function createLettaProvider(
@@ -160,10 +199,20 @@ export function createLettaProvider(
       async doGenerate(options): Promise<any> {
         const { prompt, abortSignal } = options;
 
-        // Strip Dyad's system prompt, inject project context
+        // Strip Dyad's system prompt, inject project context.
+        // Letta CLI doesn't support image attachments in headless mode;
+        // we still extract them (which materialises them to disk) so we
+        // can warn AND cleanup, instead of leaving stale temp files.
         const cwd = currentWorkingDirectory || process.cwd();
         const projectContext = buildCliProjectContext(cwd);
-        const rawMessage = extractCliUserMessage(prompt);
+        const extracted = extractCliUserMessageWithAttachments(prompt);
+        const { text: rawMessage, imagePaths, imageUrls } = extracted;
+        if (imagePaths.length > 0 || imageUrls.length > 0) {
+          logger.warn(
+            `Letta CLI: dropping ${imagePaths.length} image file(s) and ${imageUrls.length} image URL(s) — Letta headless mode does not support attachments`,
+          );
+          cleanupCliAttachments(imagePaths);
+        }
         const userMessage = projectContext
           ? `${projectContext}\n\n${rawMessage}`
           : rawMessage;
@@ -252,10 +301,20 @@ export function createLettaProvider(
       async doStream(options): Promise<any> {
         const { prompt, abortSignal } = options;
 
-        // Strip Dyad's system prompt, inject project context
+        // Strip Dyad's system prompt, inject project context.
+        // Letta CLI doesn't support image attachments in headless mode;
+        // we still extract them (which materialises them to disk) so we
+        // can warn AND cleanup, instead of leaving stale temp files.
         const cwd = currentWorkingDirectory || process.cwd();
         const projectContext = buildCliProjectContext(cwd);
-        const rawMessage = extractCliUserMessage(prompt);
+        const extracted = extractCliUserMessageWithAttachments(prompt);
+        const { text: rawMessage, imagePaths, imageUrls } = extracted;
+        if (imagePaths.length > 0 || imageUrls.length > 0) {
+          logger.warn(
+            `Letta CLI: dropping ${imagePaths.length} image file(s) and ${imageUrls.length} image URL(s) — Letta headless mode does not support attachments`,
+          );
+          cleanupCliAttachments(imagePaths);
+        }
         const userMessage = projectContext
           ? `${projectContext}\n\n${rawMessage}`
           : rawMessage;
@@ -301,8 +360,14 @@ export function createLettaProvider(
         let totalOutputTokens = 0;
         let stderrBuffer = "";
 
-        // Track active tools for status updates
-        const activeTools = new Map<string, string>();
+        // Track tools that have been opened via a tool_call event so that
+        // the matching tool_return event can close them with the correct tag.
+        // Maps callId -> { name, native }. `native = true` means we emitted a
+        // <dyad-*> opening tag and need to emit the matching closer.
+        const activeTools = new Map<
+          string,
+          { name: string; native: boolean }
+        >();
 
         const stream = new ReadableStream({
           start(controller) {
@@ -365,10 +430,15 @@ export function createLettaProvider(
                       });
                     }
 
-                    // Tool call - show what tool is being used
+                    // Tool call - show what tool is being used (emit native
+                    // <dyad-*> tags when we recognise the tool name; fall back
+                    // to a markdown header for Letta-only tools like memory
+                    // ops where Dyad has no rendering counterpart).
                     if (event.message_type === "tool_call" && event.tool_call) {
                       const toolName = event.tool_call.name;
                       const callId = event.id || toolName;
+                      const args = event.tool_call.arguments || {};
+                      const cwd = currentWorkingDirectory || process.cwd();
 
                       if (!textStartSent) {
                         controller.enqueue({
@@ -379,33 +449,115 @@ export function createLettaProvider(
                       }
 
                       if (!activeTools.has(callId)) {
-                        activeTools.set(callId, toolName);
-                        let toolMessage = `\n\n---\n**Tool: ${toolName}**\n`;
+                        const emit = (delta: string) =>
+                          controller.enqueue({
+                            type: "text-delta",
+                            id: textId,
+                            delta,
+                          });
 
-                        // Show arguments if available
+                        let native = false;
+                        const filePath = strArg(args, "file_path", "path");
+                        const command = strArg(args, "command");
+                        const query = strArg(args, "query");
+                        const url = strArg(args, "url");
+                        const content = strArg(args, "content", "file_text");
+                        const oldStr = strArg(args, "old_string", "old_str");
+                        const newStr = strArg(args, "new_string", "new_str");
+
                         if (
-                          event.tool_call.arguments &&
-                          Object.keys(event.tool_call.arguments).length > 0
+                          (toolName === "write_file" ||
+                            toolName === "create_file") &&
+                          filePath &&
+                          content !== undefined
                         ) {
-                          const argsStr = JSON.stringify(
-                            event.tool_call.arguments,
-                            null,
-                            2,
+                          const rel = toRelativePath(filePath, cwd);
+                          emit(
+                            `\n<dyad-write path="${escapeXmlAttr(rel)}" description="${escapeXmlAttr(`Writing ${rel}`)}">\n${content}\n</dyad-write>\n`,
                           );
-                          if (argsStr.length < 500) {
-                            toolMessage += `\`\`\`json\n${argsStr}\n\`\`\`\n`;
+                          native = true; // self-closing — no return-event work
+                        } else if (
+                          (toolName === "str_replace" ||
+                            toolName === "str_replace_editor" ||
+                            toolName === "replace") &&
+                          filePath &&
+                          oldStr !== undefined &&
+                          newStr !== undefined
+                        ) {
+                          const rel = toRelativePath(filePath, cwd);
+                          const srBlock = `<<<<<<< SEARCH\n${oldStr}\n=======\n${newStr}\n>>>>>>> REPLACE`;
+                          emit(
+                            `\n<dyad-search-replace path="${escapeXmlAttr(rel)}" description="${escapeXmlAttr(`Editing ${rel}`)}">\n${srBlock}\n</dyad-search-replace>\n`,
+                          );
+                          native = true; // self-closing
+                        } else if (
+                          (toolName === "read_file" || toolName === "view") &&
+                          filePath
+                        ) {
+                          const rel = toRelativePath(filePath, cwd);
+                          emit(`\n<dyad-read path="${escapeXmlAttr(rel)}">\n`);
+                          native = true;
+                        } else if (
+                          toolName === "list_files" ||
+                          toolName === "list_directory" ||
+                          toolName === "glob"
+                        ) {
+                          const dir =
+                            strArg(args, "path", "directory") ||
+                            strArg(args, "pattern") ||
+                            ".";
+                          emit(
+                            `\n<dyad-list-files directory="${escapeXmlAttr(toRelativePath(dir, cwd))}">\n`,
+                          );
+                          native = true;
+                        } else if (
+                          (toolName === "bash" ||
+                            toolName === "run_command" ||
+                            toolName === "shell") &&
+                          command !== undefined
+                        ) {
+                          const cmdTitle =
+                            command.length > 60
+                              ? `$ ${command.slice(0, 57)}...`
+                              : command
+                                ? `$ ${command}`
+                                : "Running command";
+                          emit(
+                            `\n<dyad-output type="info" message="${escapeXmlAttr(cmdTitle)}">\n`,
+                          );
+                          native = true;
+                        } else if (
+                          (toolName === "web_search" ||
+                            toolName === "google_web_search") &&
+                          query !== undefined
+                        ) {
+                          emit(
+                            `\n<dyad-web-search>\n${escapeXmlAttr(query)}\n`,
+                          );
+                          native = true;
+                        } else if (toolName === "web_fetch" && url) {
+                          emit(`\n<dyad-web-search>\n${escapeXmlAttr(url)}\n`);
+                          native = true;
+                        } else {
+                          // Memory tools (core_memory_append, etc.) and any
+                          // other unrecognised tool — fall back to a small
+                          // markdown header rather than spamming JSON.
+                          let toolMessage = `\n\n---\n**Tool: ${toolName}**\n`;
+                          if (Object.keys(args).length > 0) {
+                            const argsStr = JSON.stringify(args, null, 2);
+                            if (argsStr.length < 500) {
+                              toolMessage += `\`\`\`json\n${argsStr}\n\`\`\`\n`;
+                            }
                           }
+                          emit(toolMessage);
                         }
 
-                        controller.enqueue({
-                          type: "text-delta",
-                          id: textId,
-                          delta: toolMessage,
-                        });
+                        activeTools.set(callId, { name: toolName, native });
                       }
                     }
 
-                    // Tool return - show result
+                    // Tool return - close the matching opened tag (or print
+                    // a markdown result block for the fallback path).
                     if (
                       event.message_type === "tool_return" &&
                       event.tool_return !== undefined
@@ -418,15 +570,68 @@ export function createLettaProvider(
                         textStartSent = true;
                       }
 
-                      const formattedOutput = formatToolOutput(
-                        event.tool_return,
-                        1000,
-                      );
-                      controller.enqueue({
-                        type: "text-delta",
-                        id: textId,
-                        delta: `\`\`\`\n${formattedOutput}\n\`\`\`\n---\n\n`,
-                      });
+                      // Letta does not provide a per-event tool ID on returns,
+                      // so we just match the most recent open entry. Iterate
+                      // and grab the last (insertion-ordered) callId.
+                      let matchedCallId: string | undefined;
+                      let matchedInfo:
+                        | { name: string; native: boolean }
+                        | undefined;
+                      for (const [k, v] of activeTools) {
+                        matchedCallId = k;
+                        matchedInfo = v;
+                      }
+
+                      const emit = (delta: string) =>
+                        controller.enqueue({
+                          type: "text-delta",
+                          id: textId,
+                          delta,
+                        });
+
+                      const output = truncateOutput(event.tool_return, 1500);
+
+                      if (matchedInfo?.native) {
+                        const toolName = matchedInfo.name;
+                        if (
+                          toolName === "write_file" ||
+                          toolName === "create_file" ||
+                          toolName === "str_replace" ||
+                          toolName === "str_replace_editor" ||
+                          toolName === "replace"
+                        ) {
+                          // Self-closing — nothing to emit.
+                        } else if (
+                          toolName === "read_file" ||
+                          toolName === "view"
+                        ) {
+                          emit(`${output}\n</dyad-read>\n`);
+                        } else if (
+                          toolName === "list_files" ||
+                          toolName === "list_directory" ||
+                          toolName === "glob"
+                        ) {
+                          emit(`${output}\n</dyad-list-files>\n`);
+                        } else if (
+                          toolName === "bash" ||
+                          toolName === "run_command" ||
+                          toolName === "shell"
+                        ) {
+                          emit(`${output}\n</dyad-output>\n`);
+                        } else if (
+                          toolName === "web_search" ||
+                          toolName === "google_web_search" ||
+                          toolName === "web_fetch"
+                        ) {
+                          emit(`${output}\n</dyad-web-search>\n`);
+                        }
+                      } else {
+                        emit(`\`\`\`\n${output}\n\`\`\`\n---\n\n`);
+                      }
+
+                      if (matchedCallId) {
+                        activeTools.delete(matchedCallId);
+                      }
                     }
 
                     // Usage statistics

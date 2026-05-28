@@ -18,6 +18,12 @@ export const NodeSystemInfoSchema = z.object({
 
 export type NodeSystemInfo = z.infer<typeof NodeSystemInfoSchema>;
 
+export const InstallPnpmResultSchema = z.object({
+  pnpmVersion: z.string(),
+});
+
+export type InstallPnpmResult = z.infer<typeof InstallPnpmResultSchema>;
+
 export const SystemDebugInfoSchema = z.object({
   nodeVersion: z.string().nullable(),
   pnpmVersion: z.string().nullable(),
@@ -49,9 +55,15 @@ export const SelectAppFolderResultSchema = z.object({
   name: z.string().nullable(),
 });
 
-export const SelectAppLocationResultSchema = z.object({
+export const SelectCustomAppsFolderResultSchema = z.object({
   path: z.string().nullable(),
   canceled: z.boolean(),
+});
+
+export const GetCustomAppsFolderResultSchema = z.object({
+  path: z.string(),
+  isPathAvailable: z.boolean(),
+  isPathDefault: z.boolean(),
 });
 
 export const DoesReleaseNoteExistParamsSchema = z.object({
@@ -123,6 +135,13 @@ export const systemContracts = {
     output: z.void(),
   }),
 
+  // restore focus to main window
+  focusWindow: defineContract({
+    channel: "window:focus",
+    input: z.void(),
+    output: z.void(),
+  }),
+
   // Platform info
   getSystemPlatform: defineContract({
     channel: "get-system-platform",
@@ -149,6 +168,12 @@ export const systemContracts = {
     output: NodeSystemInfoSchema,
   }),
 
+  installPnpm: defineContract({
+    channel: "install-pnpm",
+    input: z.void(),
+    output: InstallPnpmResultSchema,
+  }),
+
   selectNodeFolder: defineContract({
     channel: "select-node-folder",
     input: z.void(),
@@ -166,6 +191,25 @@ export const systemContracts = {
     channel: "select-app-folder",
     input: z.void(),
     output: SelectAppFolderResultSchema,
+  }),
+
+  // Custom apps folder
+  getCustomAppsFolder: defineContract({
+    channel: "get-custom-apps-folder",
+    input: z.void(),
+    output: GetCustomAppsFolderResultSchema,
+  }),
+
+  selectCustomAppsFolder: defineContract({
+    channel: "select-custom-apps-folder",
+    input: z.void(),
+    output: SelectCustomAppsFolderResultSchema,
+  }),
+
+  setCustomAppsFolder: defineContract({
+    channel: "set-custom-apps-folder",
+    input: z.string().nullable(),
+    output: z.void(),
   }),
 
   // External
