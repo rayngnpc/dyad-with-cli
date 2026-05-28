@@ -39,14 +39,11 @@ export function summarizeArgs(
   for (const [key, value] of Object.entries(args)) {
     let valueStr: string;
     if (typeof value === "string") {
-      valueStr =
-        value.length > 50 ? `"${value.slice(0, 50)}…"` : `"${value}"`;
+      valueStr = value.length > 50 ? `"${value.slice(0, 50)}…"` : `"${value}"`;
     } else if (value === null || value === undefined) {
       valueStr = String(value);
     } else if (typeof value === "object") {
-      valueStr = Array.isArray(value)
-        ? `[Array(${value.length})]`
-        : "[Object]";
+      valueStr = Array.isArray(value) ? `[Array(${value.length})]` : "[Object]";
     } else {
       valueStr = String(value);
     }

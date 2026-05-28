@@ -82,9 +82,7 @@ const TIER_4_NEVER_EXPOSE = new Set([
  * In Zod v4, .refine() returns a ZodObject (not ZodEffects), so .shape is
  * always directly accessible. This helper safely extracts it with a fallback.
  */
-function extractZodRawShape(
-  schema: z.ZodType<unknown>,
-): z.ZodRawShape | null {
+function extractZodRawShape(schema: z.ZodType<unknown>): z.ZodRawShape | null {
   if (schema instanceof z.ZodObject) {
     return schema.shape as z.ZodRawShape;
   }
@@ -517,7 +515,8 @@ export class McpServerManager {
   private isToolAllowed(toolName: string): boolean {
     if (TIER_4_NEVER_EXPOSE.has(toolName)) return false;
     if (TIER_1_TOOLS.has(toolName)) return true;
-    if (TIER_2_TOOLS.has(toolName)) return this.config.enableWriteTools === true;
+    if (TIER_2_TOOLS.has(toolName))
+      return this.config.enableWriteTools === true;
     if (TIER_3_TOOLS.has(toolName))
       return this.config.enableNetworkTools === true;
     return false;
@@ -529,9 +528,7 @@ export class McpServerManager {
     for (const tool of TOOL_DEFINITIONS) {
       if (!this.isToolAllowed(tool.name)) continue;
 
-      const shape = extractZodRawShape(
-        tool.inputSchema as z.ZodType<unknown>,
-      );
+      const shape = extractZodRawShape(tool.inputSchema as z.ZodType<unknown>);
       if (!shape) {
         log.warn(
           `MCP: Skipping tool "${tool.name}" — unable to extract parameter schema`,
@@ -547,10 +544,7 @@ export class McpServerManager {
     );
   }
 
-  private registerSingleTool(
-    tool: ToolDefinition,
-    shape: z.ZodRawShape,
-  ): void {
+  private registerSingleTool(tool: ToolDefinition, shape: z.ZodRawShape): void {
     const z3Shape = convertZ4ShapeToZ3(shape);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (this.mcpServer!.tool as any)(
@@ -701,7 +695,9 @@ export class McpServerManager {
                 .map((line, index) => {
                   const lineNumber = startLine + index;
                   const editMarker =
-                    lineNumber === component.lineNumber ? " // <-- EDIT HERE" : "";
+                    lineNumber === component.lineNumber
+                      ? " // <-- EDIT HERE"
+                      : "";
                   return `${lineNumber}: ${line}${editMarker}`;
                 })
                 .join("\n");
@@ -750,9 +746,7 @@ export class McpServerManager {
         try {
           const dataUrl = await this.requestScreenshot();
           // dataUrl is "data:image/png;base64,<base64data>"
-          const base64Match = dataUrl.match(
-            /^data:image\/png;base64,(.+)$/,
-          );
+          const base64Match = dataUrl.match(/^data:image\/png;base64,(.+)$/);
           if (!base64Match) {
             return {
               content: [
@@ -826,9 +820,7 @@ export class McpServerManager {
           };
         }
 
-        const base64Match = dataUrl.match(
-          /^data:image\/png;base64,(.+)$/,
-        );
+        const base64Match = dataUrl.match(/^data:image\/png;base64,(.+)$/);
         if (!base64Match) {
           return {
             content: [

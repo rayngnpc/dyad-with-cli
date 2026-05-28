@@ -53,8 +53,7 @@ export function McpServerSettings() {
       }
       await refreshStatus();
     } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Unknown error";
+      const message = error instanceof Error ? error.message : "Unknown error";
       toast.error(`Failed to ${checked ? "start" : "stop"} MCP server`, {
         description: message,
       });
@@ -95,8 +94,7 @@ export function McpServerSettings() {
         description: "Update external MCP client configs with the new token.",
       });
     } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Unknown error";
+      const message = error instanceof Error ? error.message : "Unknown error";
       toast.error("Failed to regenerate token", { description: message });
     }
   };
@@ -108,7 +106,10 @@ export function McpServerSettings() {
   return (
     <div className="space-y-4">
       {/* Enable/Disable Toggle */}
-      <div id={SETTING_IDS.mcpServerEnable} className="flex items-center space-x-2">
+      <div
+        id={SETTING_IDS.mcpServerEnable}
+        className="flex items-center space-x-2"
+      >
         <Switch
           id="enable-mcp-server"
           aria-label="Enable MCP Server"
@@ -226,9 +227,7 @@ export function McpServerSettings() {
             updateSettings({ mcpServerEnableWriteTools: checked });
           }}
         />
-        <Label htmlFor="mcp-server-write-tools">
-          Allow write operations
-        </Label>
+        <Label htmlFor="mcp-server-write-tools">Allow write operations</Label>
       </div>
       <p className="text-sm text-gray-500 dark:text-gray-400">
         When enabled, external MCP clients can write files, edit code, and

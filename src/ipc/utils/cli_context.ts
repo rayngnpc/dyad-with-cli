@@ -35,10 +35,7 @@ const CONFIG_FILES = [
  * Read a file and return its content truncated to maxChars.
  * Returns null if the file doesn't exist or can't be read.
  */
-function readFileContent(
-  filePath: string,
-  maxChars: number,
-): string | null {
+function readFileContent(filePath: string, maxChars: number): string | null {
   try {
     const content = fs.readFileSync(filePath, "utf-8");
     if (content.length > maxChars) {
@@ -74,9 +71,7 @@ function summarizePackageJson(cwd: string): string | null {
       );
     }
 
-    const devDeps = pkg.devDependencies as
-      | Record<string, string>
-      | undefined;
+    const devDeps = pkg.devDependencies as Record<string, string> | undefined;
     if (devDeps && Object.keys(devDeps).length > 0) {
       lines.push(
         `DevDependencies: ${Object.entries(devDeps)

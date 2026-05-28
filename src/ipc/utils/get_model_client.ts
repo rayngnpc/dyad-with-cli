@@ -474,7 +474,9 @@ function getRegularModelClient(
       };
     }
     case "opencode": {
-      log.info(`[DEBUG MODEL TRACE] get_model_client case "opencode": model.name="${model.name}", model.provider="${model.provider}"`);
+      log.info(
+        `[DEBUG MODEL TRACE] get_model_client case "opencode": model.name="${model.name}", model.provider="${model.provider}"`,
+      );
       const provider = createOpenCodeProvider();
       return {
         modelClient: {

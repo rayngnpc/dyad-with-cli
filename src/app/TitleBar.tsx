@@ -31,7 +31,7 @@ export const TitleBar = () => {
   const selectedChatId = useAtomValue(selectedChatIdAtom);
   const { apps } = useLoadApps();
   const { navigate } = useRouter();
-  const { settings, refreshSettings } = useSettings();
+  const { settings: _settings, refreshSettings } = useSettings();
   const queryClient = useQueryClient();
   const [isSuccessDialogOpen, setIsSuccessDialogOpen] = useState(false);
   const platform = useSystemPlatform();

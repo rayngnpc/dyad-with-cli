@@ -371,8 +371,14 @@ export async function processFullResponseActions(
 
     // Process all file renames
     for (const tag of dyadRenameTags) {
-      const fromPath = safeJoin(appPath, normalizeToRelativePath(appPath, tag.from));
-      const toPath = safeJoin(appPath, normalizeToRelativePath(appPath, tag.to));
+      const fromPath = safeJoin(
+        appPath,
+        normalizeToRelativePath(appPath, tag.from),
+      );
+      const toPath = safeJoin(
+        appPath,
+        normalizeToRelativePath(appPath, tag.to),
+      );
 
       // Track if this involves shared modules
       if (isSharedServerModule(tag.from) || isSharedServerModule(tag.to)) {

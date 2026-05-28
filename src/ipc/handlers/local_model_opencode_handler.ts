@@ -17,7 +17,7 @@ export function getOpenCodePath(): string {
       {
         encoding: "utf-8",
         shell: "/bin/bash",
-      }
+      },
     ).trim();
     if (resolved) return resolved;
   } catch {
@@ -127,7 +127,7 @@ function parseOpenCodeModels(output: string): OpenCodeModelInfo[] {
 export async function fetchOpenCodeModels(): Promise<LocalModelListResponse> {
   if (!isOpenCodeAvailable()) {
     throw new Error(
-      "OpenCode CLI is not installed or not found in PATH. Install it from: https://opencode.ai"
+      "OpenCode CLI is not installed or not found in PATH. Install it from: https://opencode.ai",
     );
   }
 
@@ -137,10 +137,10 @@ export async function fetchOpenCodeModels(): Promise<LocalModelListResponse> {
   try {
     const opencodePath = getOpenCodePath();
     const output = execSync(`${opencodePath} models`, { encoding: "utf-8" });
-    
+
     const parsedModels = parseOpenCodeModels(output);
-    
-    const localModels: LocalModel[] = parsedModels.map(m => ({
+
+    const localModels: LocalModel[] = parsedModels.map((m) => ({
       modelName: m.model,
       displayName: m.displayName,
       provider: "opencode",
@@ -150,7 +150,9 @@ export async function fetchOpenCodeModels(): Promise<LocalModelListResponse> {
     return { models: localModels };
   } catch (error) {
     logger.error("Failed to fetch OpenCode models:", error);
-    throw new Error("Failed to fetch OpenCode models. Is OpenCode CLI configured?");
+    throw new Error(
+      "Failed to fetch OpenCode models. Is OpenCode CLI configured?",
+    );
   }
 }
 
@@ -162,20 +164,20 @@ export function registerOpenCodeHandlers() {
     "local-models:list-opencode",
     async (): Promise<LocalModelListResponse> => {
       return fetchOpenCodeModels();
-    }
+    },
   );
 
   ipcMain.handle(
     "local-models:opencode-available",
     async (): Promise<boolean> => {
       return isOpenCodeAvailable();
-    }
+    },
   );
 
   ipcMain.handle(
     "local-models:opencode-version",
     async (): Promise<string | null> => {
       return getOpenCodeVersion();
-    }
+    },
   );
 }

@@ -237,8 +237,7 @@ export function ModelPicker() {
     !geminiCliLoading && !geminiCliError && geminiCliModels.length > 0;
   const hasOpenCodeModels =
     !openCodeLoading && !openCodeError && openCodeModels.length > 0;
-  const hasLettaModels =
-    !lettaLoading && !lettaError && lettaModels.length > 0;
+  const hasLettaModels = !lettaLoading && !lettaError && lettaModels.length > 0;
 
   if (!settings) {
     return null;
@@ -451,7 +450,9 @@ export function ModelPicker() {
         <span className="truncate">
           {modelDisplayName === "Auto" && (
             <>
-              <span className="text-xs text-muted-foreground/70">Model:</span>{" "}
+              <span className="text-xs text-muted-foreground/70">
+                Model:
+              </span>{" "}
             </>
           )}
           {modelDisplayName}

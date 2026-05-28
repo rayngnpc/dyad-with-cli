@@ -18,7 +18,6 @@ import {
   Cog,
   ExternalLink,
   Lightbulb,
-  Loader2,
   Maximize2,
   Minimize2,
   Monitor,
@@ -287,7 +286,6 @@ export const PreviewIframe = ({ loading }: { loading: boolean }) => {
     });
   }, [selectedAppId]);
 
-
   // Listen for MCP screenshot requests from main process
   useEffect(() => {
     const unsubscribe = ipc.events.mcpServer.onRequestScreenshot(
@@ -322,10 +320,7 @@ export const PreviewIframe = ({ loading }: { loading: boolean }) => {
         };
 
         window.addEventListener("message", handleResponse);
-        iframe.contentWindow.postMessage(
-          { type: "dyad-take-screenshot" },
-          "*",
-        );
+        iframe.contentWindow.postMessage({ type: "dyad-take-screenshot" }, "*");
       },
     );
 

@@ -17,7 +17,7 @@ export function getLettaPath(): string {
       {
         encoding: "utf-8",
         shell: "/bin/bash",
-      }
+      },
     ).trim();
     if (resolved) return resolved;
   } catch {
@@ -92,7 +92,10 @@ function getLettaModels(): LettaModelInfo[] {
     { model: "opus", displayName: "Claude Opus 4.5" },
     { model: "opus-4.1", displayName: "Claude Opus 4.1" },
     { model: "sonnet-4.5", displayName: "Claude Sonnet 4.5" },
-    { model: "sonnet-4.5-no-reasoning", displayName: "Claude Sonnet 4.5 (No Reasoning)" },
+    {
+      model: "sonnet-4.5-no-reasoning",
+      displayName: "Claude Sonnet 4.5 (No Reasoning)",
+    },
     { model: "haiku", displayName: "Claude Haiku 4.5" },
     // OpenAI models
     { model: "gpt-5-codex", displayName: "GPT-5 Codex" },
@@ -124,7 +127,7 @@ function getLettaModels(): LettaModelInfo[] {
 export async function fetchLettaModels(): Promise<LocalModelListResponse> {
   if (!isLettaAvailable()) {
     throw new Error(
-      "Letta CLI is not installed or not found in PATH. Install it from: https://github.com/letta-ai/letta-code"
+      "Letta CLI is not installed or not found in PATH. Install it from: https://github.com/letta-ai/letta-code",
     );
   }
 
@@ -156,7 +159,7 @@ export function registerLettaHandlers() {
     "local-models:list-letta",
     async (): Promise<LocalModelListResponse> => {
       return fetchLettaModels();
-    }
+    },
   );
 
   ipcMain.handle("local-models:letta-available", async (): Promise<boolean> => {
@@ -167,6 +170,6 @@ export function registerLettaHandlers() {
     "local-models:letta-version",
     async (): Promise<string | null> => {
       return getLettaVersion();
-    }
+    },
   );
 }

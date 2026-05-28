@@ -27,10 +27,13 @@ export function registerMcpServerHandlers(): void {
     };
   });
 
-  createTypedHandler(mcpServerContracts.setActiveApp, async (_event, params) => {
-    mcpServerManager.setActiveApp(params.appId, params.appPath);
-    return { success: true };
-  });
+  createTypedHandler(
+    mcpServerContracts.setActiveApp,
+    async (_event, params) => {
+      mcpServerManager.setActiveApp(params.appId, params.appPath);
+      return { success: true };
+    },
+  );
 
   createTypedHandler(
     mcpServerContracts.syncSelectedComponents,

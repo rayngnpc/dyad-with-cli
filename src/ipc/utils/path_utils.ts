@@ -1,6 +1,5 @@
 import path from "node:path";
 import { DyadError, DyadErrorKind } from "@/errors/dyad_error";
-import { normalizePath } from "../../../shared/normalizePath";
 
 /**
  * If filePath is an absolute path that lives inside basePath, converts it to

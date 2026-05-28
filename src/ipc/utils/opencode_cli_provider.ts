@@ -102,9 +102,7 @@ function getOpenCodeToolTitle(
     default:
       return (
         fallbackTitle ||
-        toolName
-          .replace(/_/g, " ")
-          .replace(/\b\w/g, (c) => c.toUpperCase())
+        toolName.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
       );
   }
 }
@@ -732,9 +730,13 @@ export function createOpenCodeProvider(
                         nativeToolIds.add(callID);
                       } else if (toolName === "grep") {
                         const pattern =
-                          typeof input.pattern === "string" ? input.pattern : "";
+                          typeof input.pattern === "string"
+                            ? input.pattern
+                            : "";
                         const include =
-                          typeof input.include === "string" ? input.include : "";
+                          typeof input.include === "string"
+                            ? input.include
+                            : "";
                         emit(
                           `\n<dyad-output type="info" message="${escapeXmlAttr(
                             `grep ${pattern}${include ? ` (include: ${include})` : ""}`.trim(),
@@ -743,7 +745,9 @@ export function createOpenCodeProvider(
                         nativeToolIds.add(callID);
                       } else if (toolName === "bash") {
                         const command =
-                          typeof input.command === "string" ? input.command : "";
+                          typeof input.command === "string"
+                            ? input.command
+                            : "";
                         const cmdTitle =
                           command.length > 60
                             ? `$ ${command.slice(0, 57)}...`
@@ -837,11 +841,10 @@ export function createOpenCodeProvider(
                         if (toolName === "write" || toolName === "edit") {
                           // Already closed inline above; nothing more to emit.
                         } else if (toolName === "read") {
-                          emit(`${truncateOutput(output, 2000)}\n</dyad-read>\n`);
-                        } else if (
-                          toolName === "glob" ||
-                          toolName === "list"
-                        ) {
+                          emit(
+                            `${truncateOutput(output, 2000)}\n</dyad-read>\n`,
+                          );
+                        } else if (toolName === "glob" || toolName === "list") {
                           emit(
                             `${truncateOutput(output, 1000)}\n</dyad-list-files>\n`,
                           );

@@ -24,7 +24,7 @@ Dyad is an open-source AI app builder. This fork keeps everything the upstream p
 - **Native tool rendering** — file writes, edits, reads, shell commands, todos render as Dyad's native cards (no more raw JSON dumps)
 - **Image attachments** — Annotator screenshots flow through to vision-capable CLI models
 - **Sub-provider grouping** — OpenCode's many models organised by sub-provider in the picker
-- **MCP Server Bridge** *(experimental)* — opt-in HTTP server exposing Dyad's preview context to external MCP clients
+- **MCP Server Bridge** _(experimental)_ — opt-in HTTP server exposing Dyad's preview context to external MCP clients
 - **All upstream features preserved** — bring-your-own API keys, Ollama/LM Studio, Git versioning, Supabase integration, cross-platform builds
 
 ## ⚠️ Gemini CLI deprecation notice
@@ -33,16 +33,16 @@ Dyad is an open-source AI app builder. This fork keeps everything the upstream p
 
 ## 📦 What's new in this fork (vs upstream)
 
-| Feature | Upstream Dyad | This fork |
-|---|---|---|
-| Cloud LLMs via API key (Claude, GPT, Gemini API, …) | ✅ | ✅ |
-| Local inference (Ollama, LM Studio) | ✅ | ✅ |
-| **Gemini CLI** *(free-tier, OAuth)* | ❌ | ✅ |
-| **OpenCode** *(local AI agent)* | ❌ | ✅ |
-| **Letta** *(stateful agents)* | ❌ | ✅ |
-| Native UI for CLI tool calls | — | ✅ |
-| Image attachments through to CLI | — | ✅ |
-| MCP Server Bridge | ❌ | ✅ *(experimental)* |
+| Feature                                             | Upstream Dyad | This fork           |
+| --------------------------------------------------- | ------------- | ------------------- |
+| Cloud LLMs via API key (Claude, GPT, Gemini API, …) | ✅            | ✅                  |
+| Local inference (Ollama, LM Studio)                 | ✅            | ✅                  |
+| **Gemini CLI** _(free-tier, OAuth)_                 | ❌            | ✅                  |
+| **OpenCode** _(local AI agent)_                     | ❌            | ✅                  |
+| **Letta** _(stateful agents)_                       | ❌            | ✅                  |
+| Native UI for CLI tool calls                        | —             | ✅                  |
+| Image attachments through to CLI                    | —             | ✅                  |
+| MCP Server Bridge                                   | ❌            | ✅ _(experimental)_ |
 
 ## 🚀 Quick Start
 
@@ -67,6 +67,7 @@ mkdir -p userData
 npm run db:push
 npm start
 ```
+
 </details>
 
 ## 🛠 Setting up the CLI providers
@@ -80,6 +81,7 @@ Each CLI provider needs to be installed and authenticated separately. After auth
 npm install -g @google/gemini-cli
 gemini   # opens browser for Google OAuth
 ```
+
 </details>
 
 <details>
@@ -89,6 +91,7 @@ gemini   # opens browser for Google OAuth
 npm install -g opencode-ai
 opencode auth login
 ```
+
 </details>
 
 <details>
@@ -98,6 +101,7 @@ opencode auth login
 pip install letta   # or: pipx install letta
 letta login         # opens browser for Letta Cloud OAuth
 ```
+
 </details>
 
 ## 📦 Building installers
@@ -106,11 +110,11 @@ letta login         # opens browser for Letta Cloud OAuth
 npm run make
 ```
 
-| Platform | Output |
-|---|---|
-| Linux | `out/make/deb/x64/*.deb`, `out/make/rpm/x64/*.rpm` |
-| Windows | `out/make/squirrel.windows/x64/*.exe` |
-| macOS | `out/make/zip/darwin/x64/*.zip` |
+| Platform | Output                                             |
+| -------- | -------------------------------------------------- |
+| Linux    | `out/make/deb/x64/*.deb`, `out/make/rpm/x64/*.rpm` |
+| Windows  | `out/make/squirrel.windows/x64/*.exe`              |
+| macOS    | `out/make/zip/darwin/x64/*.zip`                    |
 
 Cross-platform builds require the target OS.
 
@@ -138,6 +142,7 @@ See [LICENSE](./LICENSE) for full text.
 Built on **[Dyad](https://github.com/dyad-sh/dyad)** by the Dyad team. This fork would not exist without their work — please support the upstream project.
 
 The CLI integrations build on:
+
 - [Gemini CLI](https://github.com/google-gemini/gemini-cli) by Google
 - [OpenCode](https://opencode.ai)
 - [Letta](https://docs.letta.com) (formerly MemGPT)

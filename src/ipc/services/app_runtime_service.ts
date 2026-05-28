@@ -91,14 +91,11 @@ function getNpmInstallCommand(): string {
  */
 function isNextJsProject(appPath: string): boolean {
   try {
-    const pkgRaw = fs.readFileSync(
-      path.join(appPath, "package.json"),
-      "utf-8",
-    );
+    const pkgRaw = fs.readFileSync(path.join(appPath, "package.json"), "utf-8");
     const pkg = JSON.parse(pkgRaw);
     const deps = {
-      ...(pkg.dependencies || {}),
-      ...(pkg.devDependencies || {}),
+      ...pkg.dependencies,
+      ...pkg.devDependencies,
     };
     return "next" in deps;
   } catch {

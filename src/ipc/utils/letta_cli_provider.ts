@@ -536,9 +536,7 @@ export function createLettaProvider(
                           );
                           native = true;
                         } else if (toolName === "web_fetch" && url) {
-                          emit(
-                            `\n<dyad-web-search>\n${escapeXmlAttr(url)}\n`,
-                          );
+                          emit(`\n<dyad-web-search>\n${escapeXmlAttr(url)}\n`);
                           native = true;
                         } else {
                           // Memory tools (core_memory_append, etc.) and any

@@ -96,7 +96,9 @@ export function RuntimeModeSelector() {
             <SelectTrigger className="w-48" id="runtime-mode">
               <SelectValue>
                 {(value: string | null) =>
-                  value === "docker" ? "Docker (experimental)" : "Local (default)"
+                  value === "docker"
+                    ? "Docker (experimental)"
+                    : "Local (default)"
                 }
               </SelectValue>
             </SelectTrigger>
