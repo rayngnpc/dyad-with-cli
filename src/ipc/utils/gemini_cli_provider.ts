@@ -85,6 +85,10 @@ let currentWorkingDirectory: string | undefined;
 let shouldResumeSession = false;
 let currentSessionKey: string | undefined;
 
+// Cross-app reference context (@app:Name mentions). Set per-turn by
+// chat_stream_handlers before spawning.
+let currentReferencedAppsContext: string | undefined;
+
 const initializedSessions = new Set<string>();
 
 function toRelativePath(filePath: string, cwd: string): string {
@@ -243,6 +247,16 @@ export function setGeminiCliSessionKey(key: string | undefined): void {
 }
 
 /**
+ * Set the @app:Name cross-app reference context for the next turn.
+ * Pass `undefined` to clear.
+ */
+export function setGeminiCliReferencedAppsContext(
+  text: string | undefined,
+): void {
+  currentReferencedAppsContext = text;
+}
+
+/**
  * Mark the current session as initialized (first message has been sent)
  */
 function markSessionInitialized(): void {
@@ -318,7 +332,12 @@ export function createGeminiCliProvider(
         const promptWithImages = mentions
           ? `${mentions}\n\n${rawMessage}`
           : rawMessage;
-        const userMessage = [projectContext, historyBlock, promptWithImages]
+        const userMessage = [
+          projectContext,
+          currentReferencedAppsContext,
+          historyBlock,
+          promptWithImages,
+        ]
           .filter((s) => s && s.length > 0)
           .join("\n\n");
 
@@ -454,7 +473,12 @@ export function createGeminiCliProvider(
         const promptWithImages = mentions
           ? `${mentions}\n\n${rawMessage}`
           : rawMessage;
-        const userMessage = [projectContext, historyBlock, promptWithImages]
+        const userMessage = [
+          projectContext,
+          currentReferencedAppsContext,
+          historyBlock,
+          promptWithImages,
+        ]
           .filter((s) => s && s.length > 0)
           .join("\n\n");
 
@@ -696,11 +720,23 @@ export function createGeminiCliProvider(
                           ? params.command
                           : JSON.stringify(params);
                       const command = stripShellWrapper(rawCommand);
-                      // Use the actual command (truncated) as the title
-                      const cmdTitle =
-                        command.length > 60
-                          ? `$ ${command.slice(0, 57)}...`
-                          : `$ ${command}`;
+                      // Detect package install commands so the UI conveys
+                      // "installing packages" instead of a raw shell prompt.
+                      const installMatch = command.match(
+                        /^(?:npm|pnpm|yarn)\s+(?:install|add|i)\s+(.+?)(?:\s+--[a-z-]+.*)?$/,
+                      );
+                      let cmdTitle: string;
+                      if (installMatch) {
+                        const pkgs = installMatch[1]
+                          .split(/\s+/)
+                          .filter((p) => !p.startsWith("-"))
+                          .join(" ");
+                        cmdTitle = `📦 Installing: ${pkgs}`;
+                      } else if (command.length > 60) {
+                        cmdTitle = `$ ${command.slice(0, 57)}...`;
+                      } else {
+                        cmdTitle = `$ ${command}`;
+                      }
                       const tag = `\n<dyad-output type="info" message="${escapeXmlAttr(cmdTitle)}">\n`;
                       controller.enqueue({
                         type: "text-delta",

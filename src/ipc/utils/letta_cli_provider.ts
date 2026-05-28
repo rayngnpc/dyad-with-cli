@@ -123,6 +123,10 @@ let currentWorkingDirectory: string | undefined;
 const sessionMap = new Map<string, string>();
 let currentSessionKey: string | undefined;
 
+// Cross-app reference context (@app:Name mentions). Set per-turn by
+// chat_stream_handlers before spawning.
+let currentReferencedAppsContext: string | undefined;
+
 /**
  * Set the working directory for Letta CLI operations
  */
@@ -142,6 +146,14 @@ export function setLettaSessionKey(key: string | undefined): void {
   if (key) {
     logger.info(`Letta session key set to: ${key}`);
   }
+}
+
+/**
+ * Set the @app:Name cross-app reference context for the next turn.
+ * Pass `undefined` to clear.
+ */
+export function setLettaReferencedAppsContext(text: string | undefined): void {
+  currentReferencedAppsContext = text;
 }
 
 /**
@@ -223,7 +235,12 @@ export function createLettaProvider(
         const historyBlock = hasExistingSession
           ? ""
           : buildConversationHistorySection(prompt);
-        const userMessage = [projectContext, historyBlock, rawMessage]
+        const userMessage = [
+          projectContext,
+          currentReferencedAppsContext,
+          historyBlock,
+          rawMessage,
+        ]
           .filter((s) => s && s.length > 0)
           .join("\n\n");
 
@@ -334,7 +351,12 @@ export function createLettaProvider(
         const historyBlock = hasExistingSession
           ? ""
           : buildConversationHistorySection(prompt);
-        const userMessage = [projectContext, historyBlock, rawMessage]
+        const userMessage = [
+          projectContext,
+          currentReferencedAppsContext,
+          historyBlock,
+          rawMessage,
+        ]
           .filter((s) => s && s.length > 0)
           .join("\n\n");
 

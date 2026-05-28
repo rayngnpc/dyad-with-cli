@@ -58,17 +58,48 @@ const CONFIG_FILES = [
  * the CLI's own system prompt or that mentions specific tag formats.
  */
 const DYAD_CLI_PREAMBLE = `[DYAD ASSISTANT CONTEXT]
-You are operating inside Dyad — an AI app builder. The user is editing a real, running web app. Every file you write or edit triggers a live preview reload that the user sees immediately.
+You are operating inside Dyad — an AI app builder. The user is editing a real, running web app. Every file you write, edit, rename, or delete triggers a live preview reload that the user sees immediately on the right side of their screen.
 
-Operating guidelines:
+## Operating principles
 - Make minimal, focused changes. Don't refactor surrounding code unless the user asks.
-- Follow the project's existing conventions. The project's AI_RULES.md (if present below) is the source of truth for stack choices, library rules, and styling patterns — never introduce alternative libraries or styling approaches without being asked.
-- Use the project's existing dependencies. Adding new packages should be a deliberate choice the user agrees with.
-- Errors visible to you (e.g. lint, build output, console) are visible to the user too — be direct about what's broken and how you're fixing it.
-- Prefer small, verifiable steps over large rewrites.
-- If the user's request is ambiguous, ask one focused question before making changes.
+- Before proceeding, check whether the user's request is already implemented. If it is, point that out instead of duplicating work.
+- Only edit files related to the user's request. Leave everything else alone.
+- Use your native tools (file write/edit/read/grep/shell) — Dyad converts them into the same UI cards the user sees for API providers.
 
-Use your native tools (file write, edit, read, shell, etc.) — they map automatically to Dyad's UI.
+## Code quality rules (these are non-negotiable in Dyad)
+- ALWAYS generate responsive designs (mobile + tablet + desktop). Tailwind utility classes preferred unless AI_RULES.md says otherwise.
+- DO NOT catch errors with try/catch unless the user explicitly asks. Errors must bubble up so the user (and you) see them on the next turn.
+- DO NOT overengineer. Avoid complex error handling, fallback chains, or speculative abstractions unless the user requests them. Keep code simple and elegant.
+- Aim for components ≤ 100 lines. If a file is growing past that, ask the user before splitting it.
+- Create a NEW file for every new component or hook, no matter how small. Never add new components to existing files.
+- Use toast components (the project's notification utility) for user-facing success/error events when relevant.
+- Verify every import you write actually resolves. First-party imports must point at files that exist (or that you create in the same turn). Third-party imports must be in package.json (or you must install them — see below).
+
+## Dependencies
+- The project ALREADY has shadcn/ui + Radix UI + lucide-react installed if AI_RULES.md says so. Don't reinstall them.
+- To install a new dependency, run \`npm install <pkg>\` via your shell tool. Dyad detects npm-install commands and shows them in the UI as an installation card — same as it does for API providers.
+- For multiple packages, install them in a single command: \`npm install pkg-a pkg-b pkg-c\`.
+
+## Thinking before you act
+Before writing code for any non-trivial request, walk through your reasoning briefly (a few bullet points is fine):
+1. What is the user asking for?
+2. Which files are involved?
+3. What's the minimal change that satisfies the request?
+4. Anything I might break or any assumption to verify?
+
+Then proceed with the implementation.
+
+## When to suggest a user action
+If the app needs to be rebuilt or refreshed, you can hint at it in plain text — e.g. "you'll want to rebuild the app for this to take effect" — and the user can click Rebuild / Restart / Refresh in the UI. Don't tell users to run shell commands themselves; the UI controls everything for them.
+
+## Wrapping up your response
+At the end of every response that involved code changes, give a ONE-sentence non-technical summary of what changed (suitable for someone who doesn't read code).
+
+## What NOT to do
+- Don't tell the user to run shell commands manually — you have shell tools.
+- Don't write partial implementations or leave TODO comments. Either complete the feature or clearly say which parts you've left for a follow-up turn.
+- Don't introduce new state management libraries (Redux etc.) unless explicitly asked. React's built-in state + context is preferred.
+- Don't use markdown code blocks (\`\`\`) to show file content you're writing. Use your file-write tool. Markdown code blocks are fine inside explanations.
 [END DYAD ASSISTANT CONTEXT]`;
 
 /**
@@ -141,6 +172,129 @@ function summarizePackageJson(cwd: string): string | null {
  * instructions about <dyad-write> tags) with actual project context
  * that helps the CLI model understand the project setup.
  */
+/**
+ * Walk the project's `src/` directory (or root if no src/) and produce a
+ * compact text map of source files: relative path + line count + the
+ * first few lines (imports / first export). Gives the CLI model a sense
+ * of project shape without sending the full codebase. The CLI's own
+ * file-reading tools can drill into anything that looks relevant.
+ */
+function buildCodebaseMap(cwd: string, totalBudgetChars = 8000): string {
+  const candidates = ["src", "app", "pages", "components"];
+  let rootDir: string | null = null;
+  for (const sub of candidates) {
+    const p = path.join(cwd, sub);
+    try {
+      const stat = fs.statSync(p);
+      if (stat.isDirectory()) {
+        rootDir = p;
+        break;
+      }
+    } catch {
+      // not present; try next
+    }
+  }
+  // Fall back to project root if no recognizable source dir.
+  if (!rootDir) rootDir = cwd;
+
+  const collected: { rel: string; preview: string; lineCount: number }[] = [];
+  const SKIP_DIRS = new Set([
+    "node_modules",
+    "dist",
+    "build",
+    "out",
+    ".next",
+    ".turbo",
+    ".cache",
+    ".git",
+    "coverage",
+    "userData",
+  ]);
+  const ALLOW_EXTS = new Set([
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".vue",
+    ".svelte",
+    ".astro",
+    ".css",
+    ".scss",
+    ".html",
+    ".md",
+  ]);
+
+  function walk(dir: string, depth: number): void {
+    if (depth > 6) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const ent of entries) {
+      if (ent.name.startsWith(".")) continue;
+      const full = path.join(dir, ent.name);
+      if (ent.isDirectory()) {
+        if (SKIP_DIRS.has(ent.name)) continue;
+        walk(full, depth + 1);
+        continue;
+      }
+      if (!ent.isFile()) continue;
+      const ext = path.extname(ent.name);
+      if (!ALLOW_EXTS.has(ext)) continue;
+      try {
+        const raw = fs.readFileSync(full, "utf-8");
+        const lines = raw.split("\n");
+        // Preview = first 8 non-empty lines (imports + first declaration)
+        const preview = lines
+          .filter((l) => l.trim().length > 0)
+          .slice(0, 8)
+          .join("\n");
+        collected.push({
+          rel: path.relative(cwd, full),
+          preview,
+          lineCount: lines.length,
+        });
+      } catch {
+        // skip unreadable
+      }
+    }
+  }
+
+  walk(rootDir, 0);
+
+  // Sort: prioritize files closer to project root, then alphabetical
+  collected.sort((a, b) => {
+    const da = a.rel.split(path.sep).length;
+    const db = b.rel.split(path.sep).length;
+    if (da !== db) return da - db;
+    return a.rel.localeCompare(b.rel);
+  });
+
+  // Emit entries until we exceed the budget
+  const blocks: string[] = [];
+  let used = 0;
+  for (const f of collected) {
+    const block = `### ${f.rel} (${f.lineCount} lines)\n${f.preview}`;
+    if (used + block.length > totalBudgetChars) {
+      blocks.push(
+        `... (${collected.length - blocks.length} more files omitted; use your read tool to access them by path)`,
+      );
+      break;
+    }
+    blocks.push(block);
+    used += block.length;
+  }
+
+  if (blocks.length === 0) return "";
+  return `[CODEBASE MAP - relative paths + previews. Use your file-read tool to fetch full contents on demand.]
+
+${blocks.join("\n\n")}
+
+[END CODEBASE MAP]`;
+}
+
 export function buildCliProjectContext(cwd: string): string {
   const sections: string[] = [];
 
@@ -169,13 +323,68 @@ ${sections.join("\n\n")}
 [END PROJECT CONTEXT]`
       : "";
 
+  // Codebase map gives the model an overview of files in the project.
+  const codebaseMap = buildCodebaseMap(cwd);
+
   logger.info(
-    `Built CLI project context with ${sections.length} config file(s)`,
+    `Built CLI project context with ${sections.length} config file(s) + codebase map (${codebaseMap.length} chars)`,
   );
 
-  return projectSection
-    ? `${DYAD_CLI_PREAMBLE}\n\n${projectSection}`
-    : DYAD_CLI_PREAMBLE;
+  return [DYAD_CLI_PREAMBLE, projectSection, codebaseMap]
+    .filter((s) => s && s.length > 0)
+    .join("\n\n");
+}
+
+/**
+ * Build a [REFERENCED APP CONTEXT] block for any `@app:Name` mentions in
+ * the user message. Each mentioned app gets its AI_RULES.md + a slim
+ * codebase map injected so the CLI knows about cross-referenced apps.
+ *
+ * `appNameToPath` is a resolver the caller provides — Dyad's main process
+ * has the chat → app mapping, so chat_stream_handlers can look up the
+ * absolute path for any @app:Name token. We don't reach into the Dyad
+ * DB from here to keep this module dependency-free.
+ *
+ * Returns "" if no mentions are found or no apps could be resolved.
+ */
+export function buildReferencedAppsContext(
+  userMessage: string,
+  appNameToPath: (name: string) => string | null,
+  options?: { maxApps?: number; codebaseMapBudget?: number },
+): string {
+  const maxApps = options?.maxApps ?? 3;
+  const mapBudget = options?.codebaseMapBudget ?? 4000;
+
+  // Match @app:Name with optional whitespace-separated extensions
+  // (most cases) and quoted variants. Names can contain dashes and dots.
+  const matches = Array.from(
+    userMessage.matchAll(/@app:([A-Za-z0-9_\-.]+)/g),
+  ).map((m) => m[1]);
+  if (matches.length === 0) return "";
+
+  const uniqueNames = Array.from(new Set(matches)).slice(0, maxApps);
+  const blocks: string[] = [];
+  for (const name of uniqueNames) {
+    const appPath = appNameToPath(name);
+    if (!appPath) {
+      blocks.push(`### @app:${name}\n(app not found — skipped)`);
+      continue;
+    }
+    const rules = readFileContent(path.join(appPath, "AI_RULES.md"), 2000);
+    const map = buildCodebaseMap(appPath, mapBudget);
+    const inner = [rules ? `--- AI_RULES.md ---\n${rules}` : "", map]
+      .filter((s) => s.length > 0)
+      .join("\n\n");
+    blocks.push(
+      `### @app:${name} (path: ${appPath})\n${inner || "(no readable context)"}`,
+    );
+  }
+  if (blocks.length === 0) return "";
+  return `[REFERENCED APP CONTEXT - other Dyad apps the user referenced via @app:Name]
+
+${blocks.join("\n\n")}
+
+[END REFERENCED APP CONTEXT]`;
 }
 
 /**

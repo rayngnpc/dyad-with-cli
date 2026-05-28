@@ -271,6 +271,10 @@ let currentWorkingDirectory: string | undefined;
 const sessionMap = new Map<string, string>();
 let currentSessionKey: string | undefined;
 
+// Cross-app reference context (@app:Name mentions). Set per-turn by
+// chat_stream_handlers before spawning; cleared after the turn completes.
+let currentReferencedAppsContext: string | undefined;
+
 /**
  * Set the working directory for OpenCode CLI operations
  */
@@ -290,6 +294,18 @@ export function setOpenCodeSessionKey(key: string | undefined): void {
   if (key) {
     logger.info(`OpenCode session key set to: ${key}`);
   }
+}
+
+/**
+ * Set the @app:Name cross-app reference context for the next turn.
+ * chat_stream_handlers formats the codebases of any apps referenced in
+ * the user's message and passes them here so the model has context for
+ * those other apps. Pass `undefined` to clear.
+ */
+export function setOpenCodeReferencedAppsContext(
+  text: string | undefined,
+): void {
+  currentReferencedAppsContext = text;
 }
 
 /**
@@ -384,7 +400,12 @@ export function createOpenCodeProvider(
         const historyBlock = hasExistingSession
           ? ""
           : buildConversationHistorySection(prompt);
-        const userMessage = [projectContext, historyBlock, rawMessage]
+        const userMessage = [
+          projectContext,
+          currentReferencedAppsContext,
+          historyBlock,
+          rawMessage,
+        ]
           .filter((s) => s && s.length > 0)
           .join("\n\n");
 
@@ -512,7 +533,12 @@ export function createOpenCodeProvider(
         const historyBlock = hasExistingSession
           ? ""
           : buildConversationHistorySection(prompt);
-        const userMessage = [projectContext, historyBlock, rawMessage]
+        const userMessage = [
+          projectContext,
+          currentReferencedAppsContext,
+          historyBlock,
+          rawMessage,
+        ]
           .filter((s) => s && s.length > 0)
           .join("\n\n");
 
@@ -767,12 +793,26 @@ export function createOpenCodeProvider(
                           typeof input.command === "string"
                             ? input.command
                             : "";
-                        const cmdTitle =
-                          command.length > 60
-                            ? `$ ${command.slice(0, 57)}...`
-                            : command
-                              ? `$ ${command}`
-                              : "Running command";
+                        // Recognize npm/pnpm/yarn install commands and label
+                        // them more clearly so the UI conveys "installing
+                        // packages" rather than just a shell prompt.
+                        const installMatch = command.match(
+                          /^(?:npm|pnpm|yarn)\s+(?:install|add|i)\s+(.+?)(?:\s+--[a-z-]+.*)?$/,
+                        );
+                        let cmdTitle: string;
+                        if (installMatch) {
+                          const pkgs = installMatch[1]
+                            .split(/\s+/)
+                            .filter((p) => !p.startsWith("-"))
+                            .join(" ");
+                          cmdTitle = `📦 Installing: ${pkgs}`;
+                        } else if (command.length > 60) {
+                          cmdTitle = `$ ${command.slice(0, 57)}...`;
+                        } else if (command) {
+                          cmdTitle = `$ ${command}`;
+                        } else {
+                          cmdTitle = "Running command";
+                        }
                         emit(
                           `\n<dyad-output type="info" message="${escapeXmlAttr(cmdTitle)}">\n`,
                         );
