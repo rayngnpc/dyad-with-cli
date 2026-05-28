@@ -493,11 +493,13 @@ export function createOpenCodeProvider(
 
           opencodeProcess.on("error", (err) => {
             cleanupCliAttachments(imagePaths);
+            currentReferencedAppsContext = undefined;
             reject(err);
           });
 
           opencodeProcess.on("close", (code) => {
             cleanupCliAttachments(imagePaths);
+            currentReferencedAppsContext = undefined;
             if (code !== 0) {
               reject(new Error(`OpenCode CLI exited with code ${code}`));
               return;
@@ -813,7 +815,7 @@ export function createOpenCodeProvider(
                         // them more clearly so the UI conveys "installing
                         // packages" rather than just a shell prompt.
                         const installMatch = command.match(
-                          /^(?:npm|pnpm|yarn)\s+(?:install|add|i)\s+(.+?)(?:\s+--[a-z-]+.*)?$/,
+                          /^(?:(?:npm|pnpm)\s+(?:install|add|i)|yarn\s+(?:install|add))\s+(.+?)(?:\s+--[a-z-]+.*)?$/,
                         );
                         let cmdTitle: string;
                         if (installMatch) {
@@ -1128,6 +1130,7 @@ export function createOpenCodeProvider(
 
             opencodeProcess.on("error", (error) => {
               cleanupCliAttachments(imagePaths);
+              currentReferencedAppsContext = undefined;
               if (!streamClosed) {
                 streamClosed = true;
                 controller.error(error);
@@ -1136,6 +1139,7 @@ export function createOpenCodeProvider(
 
             opencodeProcess.on("close", (code) => {
               cleanupCliAttachments(imagePaths);
+              currentReferencedAppsContext = undefined;
               // Process remaining buffer
               if (buffer.trim() && !streamClosed) {
                 try {

@@ -304,9 +304,13 @@ export function createLettaProvider(
             }
           });
 
-          lettaProcess.on("error", reject);
+          lettaProcess.on("error", (err) => {
+            currentReferencedAppsContext = undefined;
+            reject(err);
+          });
 
           lettaProcess.on("close", (code) => {
+            currentReferencedAppsContext = undefined;
             if (code !== 0) {
               reject(new Error(`Letta CLI exited with code ${code}`));
               return;
@@ -770,6 +774,7 @@ export function createLettaProvider(
             });
 
             lettaProcess.on("error", (error) => {
+              currentReferencedAppsContext = undefined;
               if (!streamClosed) {
                 streamClosed = true;
                 controller.error(error);
@@ -777,6 +782,7 @@ export function createLettaProvider(
             });
 
             lettaProcess.on("close", (code) => {
+              currentReferencedAppsContext = undefined;
               // Process remaining buffer
               if (buffer.trim() && !streamClosed) {
                 try {

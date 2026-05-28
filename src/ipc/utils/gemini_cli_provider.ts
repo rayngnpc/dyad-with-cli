@@ -398,11 +398,13 @@ export function createGeminiCliProvider(
 
           geminiProcess.on("error", (err) => {
             cleanupCliAttachments(imagePaths);
+            currentReferencedAppsContext = undefined;
             reject(err);
           });
 
           geminiProcess.on("close", (code) => {
             cleanupCliAttachments(imagePaths);
+            currentReferencedAppsContext = undefined;
             if (code !== 0) {
               reject(new Error(`Gemini CLI exited with code ${code}`));
               return;
@@ -917,6 +919,7 @@ export function createGeminiCliProvider(
 
             geminiProcess.on("error", (error) => {
               cleanupCliAttachments(imagePaths);
+              currentReferencedAppsContext = undefined;
               if (!streamClosed) {
                 streamClosed = true;
                 controller.error(error);
@@ -925,6 +928,7 @@ export function createGeminiCliProvider(
 
             geminiProcess.on("close", (code, signal) => {
               cleanupCliAttachments(imagePaths);
+              currentReferencedAppsContext = undefined;
               logger.info(
                 `Gemini CLI process closed - code: ${code}, signal: ${signal}, streamClosed: ${streamClosed}, bufferLength: ${buffer.length}`,
               );
