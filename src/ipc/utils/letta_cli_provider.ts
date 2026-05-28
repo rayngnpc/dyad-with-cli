@@ -8,6 +8,7 @@ import {
 } from "../handlers/local_model_letta_handler";
 import {
   buildCliProjectContext,
+  buildConversationHistorySection,
   cleanupCliAttachments,
   extractCliUserMessageWithAttachments,
 } from "./cli_context";
@@ -213,9 +214,18 @@ export function createLettaProvider(
           );
           cleanupCliAttachments(imagePaths);
         }
-        const userMessage = projectContext
-          ? `${projectContext}\n\n${rawMessage}`
-          : rawMessage;
+        // On the FIRST call for this Dyad chat (no Letta agent assigned
+        // yet) include prior conversation. Once an agent is in sessionMap,
+        // Letta carries history forward in the agent's memory.
+        const hasExistingSession = Boolean(
+          currentSessionKey && sessionMap.get(currentSessionKey),
+        );
+        const historyBlock = hasExistingSession
+          ? ""
+          : buildConversationHistorySection(prompt);
+        const userMessage = [projectContext, historyBlock, rawMessage]
+          .filter((s) => s && s.length > 0)
+          .join("\n\n");
 
         return new Promise((resolve, reject) => {
           const lettaPath = getLettaPath();
@@ -315,9 +325,18 @@ export function createLettaProvider(
           );
           cleanupCliAttachments(imagePaths);
         }
-        const userMessage = projectContext
-          ? `${projectContext}\n\n${rawMessage}`
-          : rawMessage;
+        // On the FIRST call for this Dyad chat (no Letta agent assigned
+        // yet) include prior conversation. Once an agent is in sessionMap,
+        // Letta carries history forward in the agent's memory.
+        const hasExistingSession = Boolean(
+          currentSessionKey && sessionMap.get(currentSessionKey),
+        );
+        const historyBlock = hasExistingSession
+          ? ""
+          : buildConversationHistorySection(prompt);
+        const userMessage = [projectContext, historyBlock, rawMessage]
+          .filter((s) => s && s.length > 0)
+          .join("\n\n");
 
         const lettaPath = getLettaPath();
         const args = ["-p", userMessage, "--output-format", "stream-json"];

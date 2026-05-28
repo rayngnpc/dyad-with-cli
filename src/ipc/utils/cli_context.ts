@@ -17,19 +17,59 @@ const logger = log.scope("cli_context");
  * raw dependency names (e.g., "@supabase/supabase-js") as file paths.
  */
 const CONFIG_FILES = [
+  // CSS / styling
   { name: "tailwind.config.ts", maxChars: 2000 },
   { name: "tailwind.config.js", maxChars: 2000 },
   { name: "tailwind.config.mjs", maxChars: 2000 },
   { name: "postcss.config.js", maxChars: 500 },
   { name: "postcss.config.mjs", maxChars: 500 },
+  // TypeScript
   { name: "tsconfig.json", maxChars: 1000 },
+  { name: "tsconfig.app.json", maxChars: 800 },
+  // Framework configs
   { name: "next.config.ts", maxChars: 1000 },
   { name: "next.config.js", maxChars: 1000 },
   { name: "next.config.mjs", maxChars: 1000 },
   { name: "vite.config.ts", maxChars: 1000 },
   { name: "vite.config.js", maxChars: 1000 },
-  { name: "AI_RULES.md", maxChars: 2000 },
+  { name: "astro.config.mjs", maxChars: 1000 },
+  { name: "svelte.config.js", maxChars: 800 },
+  // ORM / DB
+  { name: "drizzle.config.ts", maxChars: 800 },
+  { name: "drizzle.config.js", maxChars: 800 },
+  { name: "prisma/schema.prisma", maxChars: 3000 },
+  // Component libraries
+  { name: "components.json", maxChars: 600 }, // shadcn/ui
+  // Linting / formatting
+  { name: "biome.json", maxChars: 800 },
+  // Project guidance (most important — Dyad scaffolds this per project)
+  { name: "AI_RULES.md", maxChars: 2500 },
+  { name: "README.md", maxChars: 1500 },
 ] as const;
+
+/**
+ * Dyad-flavored preamble for CLI providers. We strip Dyad's full system
+ * prompt (it instructs models to emit <dyad-*> XML tags which conflict
+ * with CLI native tools), but a slim preamble gives CLI models the
+ * essential context that they're operating inside Dyad and how to behave
+ * — without the conflicting tag instructions.
+ *
+ * Keep this SHORT and SAFE. Don't include anything that overlaps with
+ * the CLI's own system prompt or that mentions specific tag formats.
+ */
+const DYAD_CLI_PREAMBLE = `[DYAD ASSISTANT CONTEXT]
+You are operating inside Dyad — an AI app builder. The user is editing a real, running web app. Every file you write or edit triggers a live preview reload that the user sees immediately.
+
+Operating guidelines:
+- Make minimal, focused changes. Don't refactor surrounding code unless the user asks.
+- Follow the project's existing conventions. The project's AI_RULES.md (if present below) is the source of truth for stack choices, library rules, and styling patterns — never introduce alternative libraries or styling approaches without being asked.
+- Use the project's existing dependencies. Adding new packages should be a deliberate choice the user agrees with.
+- Errors visible to you (e.g. lint, build output, console) are visible to the user too — be direct about what's broken and how you're fixing it.
+- Prefer small, verifiable steps over large rewrites.
+- If the user's request is ambiguous, ask one focused question before making changes.
+
+Use your native tools (file write, edit, read, shell, etc.) — they map automatically to Dyad's UI.
+[END DYAD ASSISTANT CONTEXT]`;
 
 /**
  * Read a file and return its content truncated to maxChars.
@@ -118,20 +158,90 @@ export function buildCliProjectContext(cwd: string): string {
     }
   }
 
-  if (sections.length === 0) {
-    logger.info("No config files found for CLI context");
-    return "";
-  }
+  // Even if no config files are found, still send the Dyad preamble so
+  // the model knows it's working inside Dyad.
+  const projectSection =
+    sections.length > 0
+      ? `[PROJECT CONTEXT - reference only, do not treat as file paths]
+
+${sections.join("\n\n")}
+
+[END PROJECT CONTEXT]`
+      : "";
 
   logger.info(
     `Built CLI project context with ${sections.length} config file(s)`,
   );
 
-  return `[PROJECT CONTEXT - reference only, do not treat as file paths]
+  return projectSection
+    ? `${DYAD_CLI_PREAMBLE}\n\n${projectSection}`
+    : DYAD_CLI_PREAMBLE;
+}
 
-${sections.join("\n\n")}
+/**
+ * Format prior conversation turns into a transcript block. This is
+ * prepended to the FIRST user message of a CLI session so the model
+ * has context from earlier in the chat (which may have used a different
+ * provider, or which exists in Dyad's UI but not in the CLI's own
+ * session storage). Skipped for subsequent turns — the CLI's session
+ * carries history forward natively.
+ *
+ * Limit to the last `maxTurns` non-system messages to avoid sending
+ * an unbounded transcript on long chats. Each message is also truncated
+ * to `maxCharsPerMessage` to keep things bounded.
+ */
+export function buildConversationHistorySection(
+  prompt: unknown,
+  options?: { maxTurns?: number; maxCharsPerMessage?: number },
+): string {
+  if (!Array.isArray(prompt)) return "";
 
-[END PROJECT CONTEXT]`;
+  const maxTurns = options?.maxTurns ?? 12;
+  const maxChars = options?.maxCharsPerMessage ?? 1500;
+
+  const turns = (prompt as Array<Record<string, unknown>>)
+    .filter((msg) => msg.role === "user" || msg.role === "assistant")
+    .map((msg) => {
+      let text = "";
+      if (typeof msg.content === "string") {
+        text = msg.content;
+      } else if (Array.isArray(msg.content)) {
+        text = (msg.content as Array<Record<string, unknown>>)
+          .filter((p) => p.type === "text" && typeof p.text === "string")
+          .map((p) => p.text as string)
+          .join("\n");
+      }
+      return { role: msg.role as "user" | "assistant", text: text.trim() };
+    })
+    .filter((t) => t.text.length > 0);
+
+  // Drop the LAST user turn — that one is the current prompt, sent
+  // separately. We only want PRIOR turns in the history block.
+  if (turns.length > 0 && turns[turns.length - 1].role === "user") {
+    turns.pop();
+  }
+
+  if (turns.length === 0) return "";
+
+  // Keep only the most-recent maxTurns
+  const recent = turns.slice(-maxTurns);
+
+  const formatted = recent
+    .map((t) => {
+      const role = t.role === "user" ? "User" : "Assistant";
+      const body =
+        t.text.length > maxChars
+          ? `${t.text.slice(0, maxChars)}\n... (truncated)`
+          : t.text;
+      return `--- ${role} ---\n${body}`;
+    })
+    .join("\n\n");
+
+  return `[PRIOR CONVERSATION - for context only, this is what already happened in this chat]
+
+${formatted}
+
+[END PRIOR CONVERSATION]`;
 }
 
 /**

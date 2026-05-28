@@ -8,6 +8,7 @@ import {
 } from "../handlers/local_model_gemini_cli_handler";
 import {
   buildCliProjectContext,
+  buildConversationHistorySection,
   cleanupCliAttachments,
   extractCliUserMessageWithAttachments,
 } from "./cli_context";
@@ -302,6 +303,13 @@ export function createGeminiCliProvider(
         // the -p prompt; remote URLs work the same way.
         const cwd = currentWorkingDirectory || process.cwd();
         const projectContext = buildCliProjectContext(cwd);
+        // On the FIRST call for this Dyad chat (no Gemini session to resume
+        // yet) include the prior conversation as context. Once `--resume
+        // latest` kicks in, Gemini carries its own history forward so we
+        // skip this block to avoid duplication.
+        const historyBlock = shouldResumeSession
+          ? ""
+          : buildConversationHistorySection(prompt);
         const extracted = extractCliUserMessageWithAttachments(prompt);
         const { text: rawMessage, imagePaths, imageUrls } = extracted;
         const mentions = [...imagePaths, ...imageUrls]
@@ -310,9 +318,9 @@ export function createGeminiCliProvider(
         const promptWithImages = mentions
           ? `${mentions}\n\n${rawMessage}`
           : rawMessage;
-        const userMessage = projectContext
-          ? `${projectContext}\n\n${promptWithImages}`
-          : promptWithImages;
+        const userMessage = [projectContext, historyBlock, promptWithImages]
+          .filter((s) => s && s.length > 0)
+          .join("\n\n");
 
         return new Promise((resolve, reject) => {
           const geminiPath = getGeminiCliPath();
@@ -431,6 +439,13 @@ export function createGeminiCliProvider(
         // @-mention inside the -p prompt — both local paths and URLs.
         const cwd = currentWorkingDirectory || process.cwd();
         const projectContext = buildCliProjectContext(cwd);
+        // On the FIRST call for this Dyad chat (no Gemini session to resume
+        // yet) include the prior conversation as context. Once `--resume
+        // latest` kicks in, Gemini carries its own history forward so we
+        // skip this block to avoid duplication.
+        const historyBlock = shouldResumeSession
+          ? ""
+          : buildConversationHistorySection(prompt);
         const extracted = extractCliUserMessageWithAttachments(prompt);
         const { text: rawMessage, imagePaths, imageUrls } = extracted;
         const mentions = [...imagePaths, ...imageUrls]
@@ -439,9 +454,9 @@ export function createGeminiCliProvider(
         const promptWithImages = mentions
           ? `${mentions}\n\n${rawMessage}`
           : rawMessage;
-        const userMessage = projectContext
-          ? `${projectContext}\n\n${promptWithImages}`
-          : promptWithImages;
+        const userMessage = [projectContext, historyBlock, promptWithImages]
+          .filter((s) => s && s.length > 0)
+          .join("\n\n");
 
         const geminiPath = getGeminiCliPath();
         const args = [

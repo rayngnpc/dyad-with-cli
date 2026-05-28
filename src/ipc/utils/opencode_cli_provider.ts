@@ -8,6 +8,7 @@ import {
 } from "../handlers/local_model_opencode_handler";
 import {
   buildCliProjectContext,
+  buildConversationHistorySection,
   cleanupCliAttachments,
   extractCliUserMessageWithAttachments,
 } from "./cli_context";
@@ -374,9 +375,18 @@ export function createOpenCodeProvider(
             `OpenCode CLI: ${imageUrls.length} remote image URL(s) dropped (OpenCode -f does not support URLs)`,
           );
         }
-        const userMessage = projectContext
-          ? `${projectContext}\n\n${rawMessage}`
-          : rawMessage;
+        // On the FIRST call for this Dyad chat (no OpenCode session yet)
+        // include prior conversation. Once we have a session ID, OpenCode
+        // carries history forward on its side so we skip this block.
+        const hasExistingSession = Boolean(
+          currentSessionKey && sessionMap.get(currentSessionKey),
+        );
+        const historyBlock = hasExistingSession
+          ? ""
+          : buildConversationHistorySection(prompt);
+        const userMessage = [projectContext, historyBlock, rawMessage]
+          .filter((s) => s && s.length > 0)
+          .join("\n\n");
 
         return new Promise((resolve, reject) => {
           const opencodePath = getOpenCodePath();
@@ -493,9 +503,18 @@ export function createOpenCodeProvider(
             `OpenCode CLI: ${imageUrls.length} remote image URL(s) dropped (OpenCode -f does not support URLs)`,
           );
         }
-        const userMessage = projectContext
-          ? `${projectContext}\n\n${rawMessage}`
-          : rawMessage;
+        // On the FIRST call for this Dyad chat (no OpenCode session yet)
+        // include prior conversation. Once we have a session ID, OpenCode
+        // carries history forward on its side so we skip this block.
+        const hasExistingSession = Boolean(
+          currentSessionKey && sessionMap.get(currentSessionKey),
+        );
+        const historyBlock = hasExistingSession
+          ? ""
+          : buildConversationHistorySection(prompt);
+        const userMessage = [projectContext, historyBlock, rawMessage]
+          .filter((s) => s && s.length > 0)
+          .join("\n\n");
 
         const opencodePath = getOpenCodePath();
         const args = ["run", "--format", "json"];
