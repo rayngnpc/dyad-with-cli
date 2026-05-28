@@ -12,6 +12,7 @@ import {
   cleanupCliAttachments,
   extractCliUserMessageWithAttachments,
   forceKillCliProcess,
+  unwrapCliFileReadContent,
 } from "./cli_context";
 
 const logger = log.scope("gemini_cli_provider");
@@ -117,34 +118,10 @@ function formatToolOutput(output: string, maxLength: number): string {
   return `${trimmed.substring(0, maxLength)}\n... (truncated)`;
 }
 
-/**
- * Gemini CLI's read_file tool returns output wrapped in pseudo-XML:
- *
- *   <path>/abs/path/to/file</path> <type>file</type> <content>
- *   1: line one
- *   2: line two
- *   3: line three
- *   </content>
- *
- * Embedding this verbatim inside <dyad-read> makes the chat UI render
- * the wrapper tags and line-number prefixes as raw text. This helper
- * extracts just the file body and strips the "N: " prefix so the card
- * shows the file's actual contents (matching API-provider rendering).
- *
- * Falls through to the raw output for unrecognized formats so we never
- * accidentally truncate non-wrapped output.
- */
-function unwrapGeminiFileContent(raw: string): string {
-  const match = raw.match(/<content>([\s\S]*?)<\/content>/);
-  if (!match) return raw;
-  const inner = match[1].trim();
-  // Strip leading line-number prefixes ("  1: ", "12: ", etc.).
-  const stripped = inner
-    .split("\n")
-    .map((line) => line.replace(/^\s*\d+:\s?/, ""))
-    .join("\n");
-  return stripped;
-}
+// Re-exported for backwards compat — the actual logic moved to cli_context.ts
+// so both Gemini CLI and OpenCode (which use the same wrapper format) can
+// share it. Kept this thin wrapper to avoid touching the call sites.
+const unwrapGeminiFileContent = unwrapCliFileReadContent;
 
 /**
  * Extract a human-readable error message from tool_result events.

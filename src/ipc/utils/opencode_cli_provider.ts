@@ -12,6 +12,7 @@ import {
   cleanupCliAttachments,
   extractCliUserMessageWithAttachments,
   forceKillCliProcess,
+  unwrapCliFileReadContent,
 } from "./cli_context";
 import { readSettings } from "../../main/settings";
 
@@ -961,8 +962,12 @@ export function createOpenCodeProvider(
                         ) {
                           // Already closed inline above; nothing more to emit.
                         } else if (toolName === "read") {
+                          // OpenCode's `read` returns the same
+                          // <path>/<type>/<content> wrapper Gemini does —
+                          // unwrap it so the card shows the file's actual
+                          // text rather than the XML scaffolding.
                           emit(
-                            `${truncateOutput(output, 2000)}\n</dyad-read>\n`,
+                            `${truncateOutput(unwrapCliFileReadContent(output), 2000)}\n</dyad-read>\n`,
                           );
                         } else if (toolName === "glob" || toolName === "list") {
                           emit(

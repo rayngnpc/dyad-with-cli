@@ -8,6 +8,35 @@ import log from "electron-log";
 const logger = log.scope("cli_context");
 
 /**
+ * Both Gemini CLI's `read_file` and OpenCode's `read` tools return file
+ * contents wrapped in pseudo-XML:
+ *
+ *   <path>/abs/path/to/file</path> <type>file</type> <content>
+ *   1: line one
+ *   2: line two
+ *   </content>
+ *
+ * Embedding that verbatim inside `<dyad-read>` makes the chat UI show
+ * the wrapper tags + line-number prefixes as raw text. This helper
+ * extracts just the file body and strips the "N: " prefix so the card
+ * shows the file's actual contents (matching API-provider rendering).
+ *
+ * Falls through to the raw output for unrecognized formats so we never
+ * accidentally truncate non-wrapped output.
+ */
+export function unwrapCliFileReadContent(raw: string): string {
+  if (!raw) return raw;
+  const match = raw.match(/<content>([\s\S]*?)<\/content>/);
+  if (!match) return raw;
+  const inner = match[1].trim();
+  const stripped = inner
+    .split("\n")
+    .map((line) => line.replace(/^\s*\d+:\s?/, ""))
+    .join("\n");
+  return stripped;
+}
+
+/**
  * Forcefully terminate a CLI subprocess on abort.
  *
  * Background: when a user stops a chat mid-stream in Dyad, we send
