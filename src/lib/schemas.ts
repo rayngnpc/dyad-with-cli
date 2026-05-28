@@ -15,6 +15,7 @@ export const ChatSummarySchema = z.object({
   appId: z.number(),
   title: z.string().nullable(),
   createdAt: z.date(),
+  chatMode: z.enum(["build", "ask", "local-agent", "plan"]).nullable(),
 });
 
 /**
@@ -71,6 +72,7 @@ const providers = [
   "azure",
   "xai",
   "bedrock",
+  "minimax",
 ] as const;
 
 export const cloudProviders = providers.filter(
@@ -140,7 +142,7 @@ export type VertexProviderSetting = z.infer<typeof VertexProviderSettingSchema>;
 export const RuntimeModeSchema = z.enum(["web-sandbox", "local-node", "unset"]);
 export type RuntimeMode = z.infer<typeof RuntimeModeSchema>;
 
-export const RuntimeMode2Schema = z.enum(["host", "docker"]);
+export const RuntimeMode2Schema = z.enum(["host", "docker", "cloud"]);
 export type RuntimeMode2 = z.infer<typeof RuntimeMode2Schema>;
 
 /**
@@ -160,6 +162,17 @@ export type StoredChatMode = z.infer<typeof StoredChatModeSchema>;
  */
 export const ChatModeSchema = z.enum(["build", "ask", "local-agent", "plan"]);
 export type ChatMode = z.infer<typeof ChatModeSchema>;
+
+/**
+ * Modes that stream through the local agent (tool-calling) path rather than
+ * the build-mode path that injects full codebases into the prompt. Keep this
+ * in sync with the chat-stream and token-count handlers: whenever a new mode
+ * routes through the local agent, add it here so the token estimate matches
+ * what's actually sent to the model.
+ */
+export function isLocalAgentBackedMode(mode: ChatMode | undefined): boolean {
+  return mode === "local-agent" || mode === "ask" || mode === "plan";
+}
 
 export const GitHubSecretsSchema = z.object({
   accessToken: SecretSchema.nullable(),
@@ -207,11 +220,19 @@ export const NeonSchema = z.object({
 });
 export type Neon = z.infer<typeof NeonSchema>;
 
+// IMPORTANT: Do NOT add any new experiments here. Instead, add them to BaseUserSettingsFields.
+// It's hard to turn experiments on by default when you put them in
+// ExperimentsSchema.
 export const ExperimentsSchema = z.object({
-  // Deprecated
+  enableCloudSandbox: z.boolean().optional(),
+  //////////////////////////////////////////////////////////////////////////////
+  // Deprecated experiments
+  //////////////////////////////////////////////////////////////////////////////
   enableLocalAgent: z.boolean().describe("DEPRECATED").optional(),
   enableSupabaseIntegration: z.boolean().describe("DEPRECATED").optional(),
   enableFileEditing: z.boolean().describe("DEPRECATED").optional(),
+  // do NOT read off these property, instead use BaseUserSettingsFields#enableSandboxScriptExecution
+  enableSandboxScriptExecution: z.boolean("DEPRECATED").optional(),
 });
 export type Experiments = z.infer<typeof ExperimentsSchema>;
 
@@ -330,14 +351,20 @@ const BaseUserSettingsFields = {
   previewDeviceMode: DeviceModeSchema.optional(),
 
   enableAutoFixProblems: z.boolean().optional(),
+  enableAppBlueprint: z.boolean().optional(),
   autoExpandPreviewPanel: z.boolean().optional(),
-  enableChatCompletionNotifications: z.boolean().optional(),
+  enableChatEventNotifications: z.boolean().optional(),
+  blockUnsafeNpmPackages: z.boolean().optional(),
+  enablePnpmMinimumReleaseAgeWarning: z.boolean().optional(),
+  hidePnpmMinimumReleaseAgeWarning: z.boolean().optional(),
   enableNativeGit: z.boolean().optional(),
+  enableSandboxScriptExecution: z.boolean().optional(),
   enableMcpServersForBuildMode: z.boolean().optional(),
   enableAutoUpdate: z.boolean(),
   releaseChannel: ReleaseChannelSchema,
   runtimeMode2: RuntimeMode2Schema.optional(),
   customNodePath: z.string().optional().nullable(),
+  customAppsFolder: z.string().optional().nullable(),
   isRunning: z.boolean().optional(),
   lastKnownPerformance: z
     .object({
@@ -358,6 +385,8 @@ const BaseUserSettingsFields = {
   enableMcpServer: z.boolean().optional(),
   mcpServerPort: z.number().int().min(1024).max(65535).optional(),
   mcpServerEnableWriteTools: z.boolean().optional(),
+
+  previewIdleTimeoutPolicy: z.enum(["default", "never"]).optional(),
 };
 
 /**
@@ -370,6 +399,8 @@ export const StoredUserSettingsSchema = z
     // Use StoredChatModeSchema to allow deprecated "agent" value
     selectedChatMode: StoredChatModeSchema.optional(),
     defaultChatMode: StoredChatModeSchema.optional(),
+    // Deprecated: renamed to enableChatEventNotifications
+    enableChatCompletionNotifications: z.boolean().optional(),
   })
   // Allow unknown properties to pass through (e.g. future settings
   // that should be preserved if user downgrades to an older version)
@@ -424,6 +455,10 @@ export function migrateStoredSettings(
     ...stored,
     selectedChatMode: migrateStoredChatMode(stored.selectedChatMode),
     defaultChatMode: migrateStoredChatMode(stored.defaultChatMode),
+    enableChatEventNotifications:
+      stored.enableChatEventNotifications ??
+      stored.enableChatCompletionNotifications,
+    enableAppBlueprint: stored.enableAppBlueprint ?? true,
   };
 }
 
@@ -435,6 +470,20 @@ export function isDyadProEnabled(_settings: UserSettings): boolean {
 export function hasDyadProKey(_settings: UserSettings): boolean {
   // Local fork: Pro features always enabled
   return true;
+}
+
+type PnpmMinimumReleaseAgeWarningSettings = Pick<
+  UserSettings,
+  "enablePnpmMinimumReleaseAgeWarning" | "hidePnpmMinimumReleaseAgeWarning"
+>;
+
+export function shouldShowPnpmMinimumReleaseAgeWarning(
+  settings?: PnpmMinimumReleaseAgeWarningSettings | null,
+): boolean {
+  return Boolean(
+    settings?.enablePnpmMinimumReleaseAgeWarning &&
+    !settings.hidePnpmMinimumReleaseAgeWarning,
+  );
 }
 
 /**

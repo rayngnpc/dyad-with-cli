@@ -1,7 +1,9 @@
 import { ipcMain } from "electron";
 import log from "electron-log";
 import { execSync } from "node:child_process";
-import type { LocalModelListResponse, LocalModel } from "../ipc_types";
+import type { LocalModel } from "../types";
+
+type LocalModelListResponse = { models: LocalModel[] };
 
 const logger = log.scope("opencode_handler");
 

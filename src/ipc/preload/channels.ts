@@ -23,6 +23,7 @@ import { mcpContracts, mcpEvents } from "../types/mcp";
 import { vercelContracts } from "../types/vercel";
 import { supabaseContracts } from "../types/supabase";
 import { neonContracts } from "../types/neon";
+import { migrationContracts } from "../types/migration";
 import { systemContracts, systemEvents } from "../types/system";
 import { versionContracts } from "../types/version";
 import { languageModelContracts } from "../types/language-model";
@@ -39,8 +40,15 @@ import { securityContracts } from "../types/security";
 import { miscContracts, miscEvents } from "../types/misc";
 import { freeAgentQuotaContracts } from "../types/free_agent_quota";
 import { planEvents, planContracts } from "../types/plan";
+import { integrationEvents, integrationContracts } from "../types/integration";
 import { audioContracts } from "../types/audio";
 import { mcpServerContracts, mcpServerEvents } from "../types/mcp_server";
+import { mediaContracts } from "../types/media";
+import { imageGenerationContracts } from "../types/image_generation";
+import {
+  appBlueprintContracts,
+  appBlueprintEvents,
+} from "../types/app_blueprint";
 
 // =============================================================================
 // Invoke Channels (derived from all contracts)
@@ -53,6 +61,7 @@ const HELP_STREAM_CHANNELS = getStreamChannels(helpStreamContract);
 const TEST_INVOKE_CHANNELS = [
   "test:simulateQuotaTimeElapsed",
   "test:set-node-mock",
+  "test:set-needs-app-blueprint",
 ] as const;
 
 /**
@@ -77,6 +86,7 @@ export const VALID_INVOKE_CHANNELS = [
   ...getInvokeChannels(vercelContracts),
   ...getInvokeChannels(supabaseContracts),
   ...getInvokeChannels(neonContracts),
+  ...getInvokeChannels(migrationContracts),
 
   // Features
   ...getInvokeChannels(systemContracts),
@@ -95,8 +105,12 @@ export const VALID_INVOKE_CHANNELS = [
   ...getInvokeChannels(miscContracts),
   ...getInvokeChannels(freeAgentQuotaContracts),
   ...getInvokeChannels(planContracts),
+  ...getInvokeChannels(integrationContracts),
   ...getInvokeChannels(audioContracts),
   ...getInvokeChannels(mcpServerContracts),
+  ...getInvokeChannels(mediaContracts),
+  ...getInvokeChannels(imageGenerationContracts),
+  ...getInvokeChannels(appBlueprintContracts),
 
   // Test-only channels
   ...TEST_INVOKE_CHANNELS,
@@ -123,6 +137,8 @@ export const VALID_RECEIVE_CHANNELS = [
   ...getReceiveChannels(miscEvents),
   ...getReceiveChannels(planEvents),
   ...getReceiveChannels(mcpServerEvents),
+  ...getReceiveChannels(integrationEvents),
+  ...getReceiveChannels(appBlueprintEvents),
 ] as const;
 
 // =============================================================================

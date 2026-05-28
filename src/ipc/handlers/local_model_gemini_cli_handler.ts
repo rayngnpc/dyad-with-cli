@@ -1,7 +1,9 @@
 import { execSync, spawn } from "node:child_process";
 import { ipcMain } from "electron";
 import log from "electron-log";
-import type { LocalModel, LocalModelListResponse } from "../ipc_types";
+import type { LocalModel } from "../types";
+
+type LocalModelListResponse = { models: LocalModel[] };
 
 const logger = log.scope("gemini_cli_handler");
 

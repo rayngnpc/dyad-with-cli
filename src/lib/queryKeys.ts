@@ -21,6 +21,7 @@ export const queryKeys = {
   system: {
     all: ["system"] as const,
     appVersion: ["system", "appVersion"] as const,
+    nodejsStatus: ["system", "nodejsStatus"] as const,
     platform: ["system", "platform"] as const,
   },
 
@@ -40,6 +41,9 @@ export const queryKeys = {
     all: ["apps"] as const,
     detail: ({ appId }: { appId: number | null }) =>
       ["apps", "detail", appId] as const,
+    screenshots: ({ appId }: { appId: number | null }) =>
+      ["apps", "screenshots", appId] as const,
+    thumbnails: ["apps", "thumbnails"] as const,
     search: ({ query }: { query: string }) =>
       ["apps", "search", query] as const,
   },
@@ -50,6 +54,8 @@ export const queryKeys = {
   chats: {
     all: ["chats"] as const,
     list: ({ appId }: { appId: number | null }) => ["chats", appId] as const,
+    detail: ({ chatId }: { chatId: number | null }) =>
+      ["chats", "detail", chatId] as const,
     search: ({ appId, query }: { appId: number | null; query: string }) =>
       ["chats", "search", appId, query] as const,
   },
@@ -225,6 +231,11 @@ export const queryKeys = {
     info: ["userBudgetInfo"] as const,
   },
 
+  cloudSandboxes: {
+    status: ({ appId }: { appId: number | null }) =>
+      ["cloudSandboxStatus", appId] as const,
+  },
+
   // ─────────────────────────────────────────────────────────────────────────────
   // Free Agent Quota
   // ─────────────────────────────────────────────────────────────────────────────
@@ -279,6 +290,15 @@ export const queryKeys = {
       projectId: string;
       organizationSlug: string | null;
     }) => ["supabase", "branches", projectId, organizationSlug] as const,
+    edgeLogs: ({
+      projectId,
+      appId,
+      organizationSlug,
+    }: {
+      projectId: string;
+      appId: number | null;
+      organizationSlug: string | null;
+    }) => ["supabase", "edgeLogs", projectId, appId, organizationSlug] as const,
   },
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -290,11 +310,36 @@ export const queryKeys = {
   },
 
   // ─────────────────────────────────────────────────────────────────────────────
+  // Migration
+  // ─────────────────────────────────────────────────────────────────────────────
+  migration: {
+    all: ["migration"] as const,
+    dependenciesStatus: ({ appId }: { appId: number }) =>
+      ["migration", "dependencies-status", appId] as const,
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────────
   // Neon
   // ─────────────────────────────────────────────────────────────────────────────
   neon: {
+    all: ["neon"] as const,
+    projects: ["neon", "projects"] as const,
     project: ({ appId }: { appId: number | null }) =>
-      ["neon-project", appId] as const,
+      ["neon", "project", appId] as const,
+    emailPasswordConfig: ({
+      appId,
+      branchId,
+    }: {
+      appId: number | null;
+      branchId: string | null;
+    }) => ["neon", "emailPasswordConfig", appId, branchId] as const,
+    branchConnectionUri: ({
+      appId,
+      branchType,
+    }: {
+      appId: number | null;
+      branchType: "production" | "development";
+    }) => ["neon", "branch-connection-uri", appId, branchType] as const,
   },
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -303,6 +348,13 @@ export const queryKeys = {
   appEnvVars: {
     byApp: ({ appId }: { appId: number | null }) =>
       ["app-env-vars", appId] as const,
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Media
+  // ─────────────────────────────────────────────────────────────────────────────
+  media: {
+    all: ["media"] as const,
   },
 } as const;
 
@@ -354,6 +406,9 @@ export type AppQueryKey =
     >
   | QueryKeyOf<(typeof queryKeys.userBudget)[keyof typeof queryKeys.userBudget]>
   | QueryKeyOf<
+      (typeof queryKeys.cloudSandboxes)[keyof typeof queryKeys.cloudSandboxes]
+    >
+  | QueryKeyOf<
       (typeof queryKeys.freeAgentQuota)[keyof typeof queryKeys.freeAgentQuota]
     >
   | QueryKeyOf<(typeof queryKeys.vercel)[keyof typeof queryKeys.vercel]>
@@ -363,7 +418,7 @@ export type AppQueryKey =
   | QueryKeyOf<(typeof queryKeys.mcp)[keyof typeof queryKeys.mcp]>
   | QueryKeyOf<(typeof queryKeys.supabase)[keyof typeof queryKeys.supabase]>
   | QueryKeyOf<(typeof queryKeys.github)[keyof typeof queryKeys.github]>
+  | QueryKeyOf<(typeof queryKeys.migration)[keyof typeof queryKeys.migration]>
   | QueryKeyOf<(typeof queryKeys.neon)[keyof typeof queryKeys.neon]>
-  | QueryKeyOf<
-      (typeof queryKeys.appEnvVars)[keyof typeof queryKeys.appEnvVars]
-    >;
+  | QueryKeyOf<(typeof queryKeys.appEnvVars)[keyof typeof queryKeys.appEnvVars]>
+  | QueryKeyOf<(typeof queryKeys.media)[keyof typeof queryKeys.media]>;

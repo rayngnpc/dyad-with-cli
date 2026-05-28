@@ -31,6 +31,7 @@ import { createFallback } from "./fallback_ai_model";
 import { createGeminiCliProvider } from "./gemini_cli_provider";
 import { createOpenCodeProvider } from "./opencode_cli_provider";
 import { createLettaProvider } from "./letta_cli_provider";
+import { DyadError, DyadErrorKind } from "@/errors/dyad_error";
 
 const dyadEngineUrl = process.env.DYAD_ENGINE_URL;
 
@@ -63,7 +64,10 @@ export async function getModelClient(
   const providerConfig = allProviders.find((p) => p.id === model.provider);
 
   if (!providerConfig) {
-    throw new Error(`Configuration not found for provider: ${model.provider}`);
+    throw new DyadError(
+      `Configuration not found for provider: ${model.provider}`,
+      DyadErrorKind.NotFound,
+    );
   }
 
   // Handle Dyad Pro override
@@ -125,7 +129,10 @@ export async function getModelClient(
         (p) => p.id === "openrouter",
       );
       if (!openRouterProvider) {
-        throw new Error("OpenRouter provider not found");
+        throw new DyadError(
+          "OpenRouter provider not found",
+          DyadErrorKind.NotFound,
+        );
       }
       return {
         modelClient: {
@@ -228,7 +235,10 @@ async function getProModelClient({
       (candidate) => candidate !== null,
     );
     if (validModels.length === 0) {
-      throw new Error("No auto-mode models could be resolved from the catalog");
+      throw new DyadError(
+        "No auto-mode models could be resolved from the catalog",
+        DyadErrorKind.External,
+      );
     }
 
     return {
@@ -497,6 +507,20 @@ function getRegularModelClient(
         backupModelClients: [],
       };
     }
+    case "minimax": {
+      const provider = createOpenAICompatible({
+        name: "minimax",
+        baseURL: "https://api.minimax.io/v1",
+        apiKey,
+      });
+      return {
+        modelClient: {
+          model: provider(model.name),
+          builtinProviderId: providerId,
+        },
+        backupModelClients: [],
+      };
+    }
     default: {
       // Handle custom providers
       if (providerConfig.type === "custom") {
@@ -519,7 +543,10 @@ function getRegularModelClient(
         };
       }
       // If it's not a known ID and not type 'custom', it's unsupported
-      throw new Error(`Unsupported model provider: ${model.provider}`);
+      throw new DyadError(
+        `Unsupported model provider: ${model.provider}`,
+        DyadErrorKind.Validation,
+      );
     }
   }
 }

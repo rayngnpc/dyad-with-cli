@@ -7,19 +7,22 @@ import { useNavigate } from "@tanstack/react-router";
 import { useChats } from "@/hooks/useChats";
 import { useLoadApps } from "@/hooks/useLoadApps";
 import { useSelectChat } from "@/hooks/useSelectChat";
+import { useIsMac } from "@/hooks/useChatModeToggle";
 import {
   isStreamingByIdAtom,
   recentViewedChatIdsAtom,
   selectedChatIdAtom,
   setRecentViewedChatIdsAtom,
-  removeRecentViewedChatIdAtom,
   pushRecentViewedChatIdAtom,
   closedChatIdsAtom,
   pruneClosedChatIdsAtom,
   sessionOpenedChatIdsAtom,
   closeMultipleTabsAtom,
+  type ClosedTabRecord,
 } from "@/atoms/chatAtoms";
+import { useReopenClosedTab } from "@/hooks/useReopenClosedTab";
 import { cn } from "@/lib/utils";
+import { AppAvatar } from "@/components/AppAvatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,6 +34,7 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuShortcut,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
@@ -170,6 +174,31 @@ export function partitionChatsByVisibleCount(
   };
 }
 
+/**
+ * Reorders chat IDs so that tabs for the same app are grouped together.
+ * Within each app group the original relative order is preserved.
+ * App groups are ordered by the position of their first chat in the input.
+ */
+export function groupChatIdsByApp(
+  orderedChatIds: number[],
+  chatsById: Map<number, ChatSummary>,
+): number[] {
+  // Build groups keyed by appId, preserving encounter order via a Map.
+  const groups = new Map<number, number[]>();
+  for (const chatId of orderedChatIds) {
+    const chat = chatsById.get(chatId);
+    const appId = chat?.appId ?? -1;
+    let group = groups.get(appId);
+    if (!group) {
+      group = [];
+      groups.set(appId, group);
+    }
+    group.push(chatId);
+  }
+  // Flatten groups (Map preserves insertion order → first-seen app comes first).
+  return Array.from(groups.values()).flat();
+}
+
 export function getFallbackChatIdAfterClose(
   tabs: ChatSummary[],
   closedChatId: number,
@@ -197,13 +226,15 @@ export function ChatTabs({ selectedChatId }: ChatTabsProps) {
   const closedChatIds = useAtomValue(closedChatIdsAtom);
   const sessionOpenedChatIds = useAtomValue(sessionOpenedChatIdsAtom);
   const setRecentViewedChatIds = useSetAtom(setRecentViewedChatIdsAtom);
-  const removeRecentViewedChatId = useSetAtom(removeRecentViewedChatIdAtom);
   const pushRecentViewedChatId = useSetAtom(pushRecentViewedChatIdAtom);
   const pruneClosedChatIds = useSetAtom(pruneClosedChatIdsAtom);
   const closeMultipleTabs = useSetAtom(closeMultipleTabsAtom);
   const setSelectedChatId = useSetAtom(selectedChatIdAtom);
+  const { reopenClosedTab, hasClosedTabs, lastClosedTab } =
+    useReopenClosedTab();
   const { selectChat } = useSelectChat();
   const navigate = useNavigate();
+  const isMac = useIsMac();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const [draggingChatId, setDraggingChatId] = useState<number | null>(null);
@@ -223,8 +254,8 @@ export function ChatTabs({ selectedChatId }: ChatTabsProps) {
     pruneClosedChatIds(chatIdSet);
   }, [chatIdSet, pruneClosedChatIds]);
 
-  const appNameById = useMemo(
-    () => new Map(apps.map((app) => [app.id, app.name])),
+  const appById = useMemo(
+    () => new Map(apps.map((app) => [app.id, app])),
     [apps],
   );
 
@@ -395,32 +426,13 @@ export function ChatTabs({ selectedChatId }: ChatTabsProps) {
   };
 
   const handleCloseTab = (chatId: number) => {
-    // Use orderedChats (all tabs: visible + overflow) instead of just visibleTabs
-    const closedTab = chatsById.get(chatId);
     const fallbackChatId = getFallbackChatIdAfterClose(orderedChats, chatId);
+    closeTabsAndClearNotifications([chatId], fallbackChatId ?? undefined);
 
-    removeRecentViewedChatId(chatId);
-    clearNotification(chatId);
-
-    if (!closedTab || selectedChatId !== chatId) {
-      return;
-    }
-
-    // If no fallback tab (last tab closed), navigate to home
-    if (fallbackChatId === null) {
+    if (fallbackChatId === null && selectedChatId === chatId) {
       setSelectedChatId(null);
       navigate({ to: "/" });
-      return;
     }
-
-    const fallbackTab = chatsById.get(fallbackChatId);
-    if (!fallbackTab) return;
-
-    selectChat({
-      chatId: fallbackTab.id,
-      appId: fallbackTab.appId,
-      preserveTabOrder: true,
-    });
   };
 
   // Helper to close multiple tabs and optionally switch to a fallback
@@ -432,15 +444,22 @@ export function ChatTabs({ selectedChatId }: ChatTabsProps) {
         clearNotification(id);
       }
 
-      closeMultipleTabs(idsToClose);
+      const records: ClosedTabRecord[] = idsToClose
+        .map((id) => {
+          const chat = chatsById.get(id);
+          return chat
+            ? { chatId: chat.id, appId: chat.appId, title: chat.title }
+            : null;
+        })
+        .filter((record): record is ClosedTabRecord => record !== null);
 
-      // Switch to fallback if:
-      // - fallback is provided AND
-      // - (selected chat is being closed OR selected chat differs from requested fallback)
+      closeMultipleTabs(records);
+
+      // Switch to fallback when a fallback is provided and either there is
+      // no selected chat (null) or the currently selected chat is being closed.
       if (
         fallbackChatId !== undefined &&
-        (idsToClose.includes(selectedChatId ?? -1) ||
-          selectedChatId !== fallbackChatId)
+        (selectedChatId === null || idsToClose.includes(selectedChatId ?? -1))
       ) {
         const fallbackTab = chatsById.get(fallbackChatId);
         if (fallbackTab) {
@@ -481,19 +500,35 @@ export function ChatTabs({ selectedChatId }: ChatTabsProps) {
     closeTabsAndClearNotifications(idsToClose, fallback);
   };
 
+  const handleGroupByApp = () => {
+    const grouped = groupChatIdsByApp(orderedChatIds, chatsById);
+    if (!isSameIdOrder(orderedChatIds, grouped)) {
+      setRecentViewedChatIds(grouped);
+    }
+  };
+
+  // Check whether tabs span more than one app (used to enable/disable grouping)
+  const hasMultipleApps = useMemo(() => {
+    const appIds = new Set<number>();
+    for (const chatId of orderedChatIds) {
+      const chat = chatsById.get(chatId);
+      if (chat) appIds.add(chat.appId);
+      if (appIds.size > 1) return true;
+    }
+    return false;
+  }, [orderedChatIds, chatsById]);
+
   if (orderedChats.length === 0) return null;
 
   return (
     <TooltipProvider delay={500}>
-      <div ref={containerRef} className="flex min-w-0 items-center gap-1 px-2">
+      <div ref={containerRef} className="flex min-w-0 items-end gap-1 px-2">
         <div className="flex min-w-0 flex-1 items-center overflow-hidden">
-          {visibleTabs.map((chat, index) => {
+          {visibleTabs.map((chat) => {
             const isActive = selectedChatId === chat.id;
-            const isNextActive =
-              index < visibleTabs.length - 1 &&
-              selectedChatId === visibleTabs[index + 1].id;
             const title = chat.title?.trim() || t("newChat");
-            const appName = appNameById.get(chat.appId) ?? `App ${chat.appId}`;
+            const app = appById.get(chat.appId);
+            const appName = app?.name ?? `App ${chat.appId}`;
             const titleExcerpt = getChatTitleExcerpt(title);
             const isDragging = draggingChatId === chat.id;
             const inProgress = isStreamingById.get(chat.id) === true;
@@ -558,20 +593,20 @@ export function ChatTabs({ selectedChatId }: ChatTabsProps) {
                             setDraggingChatId(null);
                           }}
                           className={cn(
-                            "group relative flex h-10 min-w-[160px] max-w-52 items-center gap-1 rounded-md px-2.5 transition-all active:scale-[0.97]",
+                            "no-app-region-drag group relative flex h-8 min-w-[160px] max-w-52 items-center gap-1 px-2 py-0.5",
                             isActive
-                              ? "bg-background text-foreground shadow-sm"
-                              : "bg-muted/50 text-muted-foreground hover:bg-muted",
+                              ? "z-10 rounded-t-md rounded-b-none border border-b-0 border-border bg-background text-foreground"
+                              : "rounded-md bg-transparent text-muted-foreground hover:bg-muted/70",
                             isDragging && "opacity-60",
-                            // Chrome-style divider on right edge
-                            !isActive &&
-                              !isNextActive &&
-                              index < visibleTabs.length - 1 &&
-                              "after:absolute after:right-0 after:top-1/4 after:h-1/2 after:w-px after:bg-border",
                           )}
                         />
                       }
                     >
+                      <AppAvatar
+                        appId={chat.appId}
+                        name={appName}
+                        className="h-4 w-4 rounded-sm text-[8px]"
+                      />
                       {inProgress && (
                         <span
                           className="flex items-center text-purple-600"
@@ -592,17 +627,38 @@ export function ChatTabs({ selectedChatId }: ChatTabsProps) {
                       )}
                       <button
                         type="button"
-                        onClick={() => handleTabClick(chat)}
+                        onPointerDown={(event) => {
+                          if (event.button !== 0) return;
+                          handleTabClick(chat);
+                        }}
+                        onClick={(event) => {
+                          if (event.detail !== 0) return;
+                          handleTabClick(chat);
+                        }}
                         className="min-w-0 flex-1 text-left rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                         aria-current={isActive ? "page" : undefined}
                       >
-                        <div className="min-w-0">
-                          <div className="truncate text-xs leading-3.5 font-bold">
+                        <div className="flex min-w-0 flex-col justify-center text-xs">
+                          <span
+                            className={cn(
+                              "truncate leading-3",
+                              isActive
+                                ? "font-semibold text-foreground"
+                                : "font-medium text-foreground/60",
+                            )}
+                          >
                             {appName}
-                          </div>
-                          <div className="truncate text-xs leading-4">
+                          </span>
+                          <span
+                            className={cn(
+                              "truncate text-[11px] leading-3.5",
+                              isActive
+                                ? "text-muted-foreground"
+                                : "text-muted-foreground/70",
+                            )}
+                          >
                             {title}
-                          </div>
+                          </span>
                         </div>
                       </button>
                       <button
@@ -612,10 +668,10 @@ export function ChatTabs({ selectedChatId }: ChatTabsProps) {
                           handleCloseTab(chat.id);
                         }}
                         className={cn(
-                          "flex h-6 w-6 items-center justify-center rounded-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                          "flex h-5 w-5 shrink-0 items-center justify-center rounded-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                           isActive
-                            ? "opacity-80 hover:bg-muted"
-                            : "opacity-0 group-hover:opacity-80 hover:bg-background/50 focus-visible:opacity-80",
+                            ? "text-muted-foreground hover:bg-muted hover:text-foreground"
+                            : "opacity-0 group-hover:opacity-100 hover:bg-background/60 focus-visible:opacity-100",
                         )}
                         aria-label={t("closeChatTab", { title })}
                       >
@@ -656,6 +712,28 @@ export function ChatTabs({ selectedChatId }: ChatTabsProps) {
                   >
                     {t("closeTabsToRight")}
                   </ContextMenuItem>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem
+                    onClick={handleGroupByApp}
+                    disabled={!hasMultipleApps}
+                  >
+                    {t("groupTabsByApp")}
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem
+                    onClick={reopenClosedTab}
+                    disabled={!hasClosedTabs}
+                    title={t("reopenClosedTabTooltip")}
+                  >
+                    {hasClosedTabs && lastClosedTab?.title
+                      ? t("reopenClosedTabWithTitle", {
+                          title: lastClosedTab.title,
+                        })
+                      : t("reopenClosedTab")}
+                    <ContextMenuShortcut title={t("reopenClosedTabTooltip")}>
+                      {isMac ? "⇧⌘T" : "Ctrl+⇧+T"}
+                    </ContextMenuShortcut>
+                  </ContextMenuItem>
                 </ContextMenuContent>
               </ContextMenu>
             );
@@ -665,7 +743,7 @@ export function ChatTabs({ selectedChatId }: ChatTabsProps) {
         {overflowTabs.length > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger
-              className="flex h-7 w-8 items-center justify-center rounded-md border border-transparent bg-muted/50 text-muted-foreground hover:bg-muted"
+              className="no-app-region-drag flex h-7 w-8 items-center justify-center rounded-md border border-transparent bg-muted/50 text-muted-foreground hover:bg-muted"
               aria-label={t("openOverflowTabs", {
                 count: overflowTabs.length,
               })}
@@ -676,7 +754,7 @@ export function ChatTabs({ selectedChatId }: ChatTabsProps) {
               {overflowTabsForMenu.map((chat) => {
                 const title = chat.title?.trim() || t("newChat");
                 const appName =
-                  appNameById.get(chat.appId) ?? `App ${chat.appId}`;
+                  appById.get(chat.appId)?.name ?? `App ${chat.appId}`;
                 const inProgress = isStreamingById.get(chat.id) === true;
                 const hasNotification =
                   !inProgress && notifiedChatIds.has(chat.id);
@@ -692,6 +770,11 @@ export function ChatTabs({ selectedChatId }: ChatTabsProps) {
                     }}
                     className="flex items-center gap-2"
                   >
+                    <AppAvatar
+                      appId={chat.appId}
+                      name={appName}
+                      className="h-5 w-5 rounded text-[9px]"
+                    />
                     {inProgress && (
                       <span
                         className="flex items-center text-purple-600"

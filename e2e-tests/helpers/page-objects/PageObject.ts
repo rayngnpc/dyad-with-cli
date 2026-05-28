@@ -30,10 +30,12 @@ import { ModelPicker } from "./components/ModelPicker";
 import { Settings } from "./components/Settings";
 import { AppManagement } from "./components/AppManagement";
 import { PromptLibrary } from "./components/PromptLibrary";
+import { BrowserNotifications } from "./components/BrowserNotifications";
 
 // Import dialog page objects
 import { ContextFilesPickerDialog } from "./dialogs/ContextFilesPickerDialog";
 import { ProModesDialog } from "./dialogs/ProModesDialog";
+import { Timeout } from "../constants";
 
 export class PageObject {
   public userDataDir: string;
@@ -52,6 +54,7 @@ export class PageObject {
   public settings: Settings;
   public appManagement: AppManagement;
   public promptLibrary: PromptLibrary;
+  public browserNotifications: BrowserNotifications;
 
   constructor(
     public electronApp: ElectronApplication,
@@ -74,6 +77,7 @@ export class PageObject {
     this.settings = new Settings(this.page, userDataDir, fakeLlmPort);
     this.appManagement = new AppManagement(this.page, electronApp, userDataDir);
     this.promptLibrary = new PromptLibrary(this.page);
+    this.browserNotifications = new BrowserNotifications(this.page);
   }
 
   // ================================
@@ -231,11 +235,19 @@ export class PageObject {
   // ================================
 
   async approveProposal() {
-    await this.page.getByTestId("approve-proposal-button").click();
+    const approveButton = this.page
+      .getByTestId("approve-proposal-button")
+      .last();
+    await expect(approveButton).toBeEnabled({ timeout: Timeout.MEDIUM });
+    await approveButton.click();
+    await expect(approveButton).toBeHidden({ timeout: Timeout.MEDIUM });
   }
 
   async rejectProposal() {
-    await this.page.getByTestId("reject-proposal-button").click();
+    const rejectButton = this.page.getByTestId("reject-proposal-button").last();
+    await expect(rejectButton).toBeEnabled({ timeout: Timeout.MEDIUM });
+    await rejectButton.click();
+    await expect(rejectButton).toBeHidden({ timeout: Timeout.MEDIUM });
   }
 
   async clickRestart() {
@@ -462,7 +474,7 @@ export class PageObject {
 
   async sendPrompt(
     prompt: string,
-    options?: { skipWaitForCompletion?: boolean },
+    options?: { skipWaitForCompletion?: boolean; timeout?: number },
   ) {
     return this.chatActions.sendPrompt(prompt, options);
   }

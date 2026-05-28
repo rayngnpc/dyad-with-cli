@@ -117,7 +117,10 @@ storybook-static/
 # Letta CLI local config
 .letta/
 
-# MCP development docs (copies live in ~/Dyad-Project/dyad-mcp/docs/)
+# MCP development docs (kept outside the repo)
 MCP_MASTER.md
 MCP_TEAM_HANDOFF.md
 implementationplan.md
+
+# Eval framework — run results
+eval-results/
