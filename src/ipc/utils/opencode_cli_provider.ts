@@ -890,6 +890,43 @@ export function createOpenCodeProvider(
                         // completion/error branches below skip the markdown
                         // fallback (which would dump the raw JSON).
                         nativeToolIds.add(callID);
+                      } else if (toolName.startsWith("mcp_")) {
+                        // MCP tool calls — show a clean info card with the
+                        // tool name (stripped of the `mcp_` prefix). The full
+                        // input/output dumps to chat are too noisy for the
+                        // common case (user just wants to see the tool fired).
+                        const mcpName = toolName.replace(/^mcp_/, "");
+                        const title = tool.state.title || mcpName;
+                        emit(
+                          `\n<dyad-output type="info" message="${escapeXmlAttr(`MCP: ${title}`)}">\n`,
+                        );
+                        nativeToolIds.add(callID);
+                      } else if (
+                        toolName.startsWith("lsp_") ||
+                        toolName.endsWith("_check") ||
+                        toolName === "typecheck" ||
+                        toolName === "typescript_check"
+                      ) {
+                        const title = tool.state.title || toolName;
+                        emit(
+                          `\n<dyad-output type="info" message="${escapeXmlAttr(`LSP: ${title}`)}">\n`,
+                        );
+                        nativeToolIds.add(callID);
+                      } else if (
+                        toolName === "skill" ||
+                        toolName.startsWith("load_skill") ||
+                        toolName === "loadskill"
+                      ) {
+                        // Skill loading — show the skill name only. The skill
+                        // body is huge and not interesting to the user.
+                        const skillName =
+                          typeof input.name === "string"
+                            ? input.name
+                            : tool.state.title || "skill";
+                        emit(
+                          `\n<dyad-output type="info" message="${escapeXmlAttr(`Skill loaded: ${skillName}`)}">\n`,
+                        );
+                        nativeToolIds.add(callID);
                       } else {
                         // Fallback for unknown tools: keep the old markdown
                         // header so behavior degrades gracefully.
@@ -938,6 +975,31 @@ export function createOpenCodeProvider(
                         ) {
                           emit(
                             `${truncateOutput(output, 1500)}\n</dyad-output>\n`,
+                          );
+                        } else if (
+                          toolName.startsWith("mcp_") ||
+                          toolName.startsWith("lsp_") ||
+                          toolName.endsWith("_check") ||
+                          toolName === "typecheck" ||
+                          toolName === "typescript_check"
+                        ) {
+                          // MCP / LSP / type-check: show truncated output
+                          // (these often return large JSON or diagnostic
+                          // arrays — keep the card scannable).
+                          emit(
+                            `${truncateOutput(output, 600)}\n</dyad-output>\n`,
+                          );
+                        } else if (
+                          toolName === "skill" ||
+                          toolName.startsWith("load_skill") ||
+                          toolName === "loadskill"
+                        ) {
+                          // Skill body is verbose markdown — show a short
+                          // preview only so the card doesn't dominate the
+                          // chat. Full skill content lives in the CLI's
+                          // context window, not the user-visible chat.
+                          emit(
+                            `${truncateOutput(output, 200)}\n</dyad-output>\n`,
                           );
                         } else if (toolName === "webfetch") {
                           emit(
@@ -990,7 +1052,15 @@ export function createOpenCodeProvider(
                         } else if (
                           toolName === "grep" ||
                           toolName === "bash" ||
-                          toolName === "task"
+                          toolName === "task" ||
+                          toolName.startsWith("mcp_") ||
+                          toolName.startsWith("lsp_") ||
+                          toolName.endsWith("_check") ||
+                          toolName === "typecheck" ||
+                          toolName === "typescript_check" ||
+                          toolName === "skill" ||
+                          toolName.startsWith("load_skill") ||
+                          toolName === "loadskill"
                         ) {
                           emit(`\n</dyad-output>\n`);
                         } else if (toolName === "webfetch") {

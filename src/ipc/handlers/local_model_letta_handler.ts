@@ -2,47 +2,19 @@ import { ipcMain } from "electron";
 import log from "electron-log";
 import { execSync } from "node:child_process";
 import type { LocalModel } from "../types";
+import { findCliBinary } from "../utils/cli_binary_discovery";
 
 type LocalModelListResponse = { models: LocalModel[] };
 
 const logger = log.scope("letta_handler");
 
-// Default path to letta CLI
+// Default path to letta CLI — cross-platform discovery (Linux + macOS + Windows).
+// Override with the LETTA_PATH env var.
 export function getLettaPath(): string {
-  if (process.env.LETTA_PATH) return process.env.LETTA_PATH;
-
-  try {
-    const resolved = execSync(
-      "which letta 2>/dev/null || command -v letta 2>/dev/null",
-      {
-        encoding: "utf-8",
-        shell: "/bin/bash",
-      },
-    ).trim();
-    if (resolved) return resolved;
-  } catch {
-    // Fall through to common local paths.
-  }
-
-  const home = process.env.HOME || "";
-  const candidates = [
-    `${home}/bin/letta`,
-    `${home}/.npm-global/bin/letta`,
-    `${home}/.local/bin/letta`,
-    "/usr/local/bin/letta",
-    "/usr/bin/letta",
-  ];
-
-  for (const candidate of candidates) {
-    try {
-      execSync(`test -x "${candidate}"`, { stdio: "ignore" });
-      return candidate;
-    } catch {
-      // try next
-    }
-  }
-
-  return "letta";
+  return findCliBinary({
+    name: "letta",
+    envVar: "LETTA_PATH",
+  });
 }
 
 /**
