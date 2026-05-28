@@ -872,7 +872,10 @@ export function createOpenCodeProvider(
                         emit(
                           `\n<dyad-output type="info" message="${escapeXmlAttr(summary)}">\n${lines}\n</dyad-output>\n`,
                         );
-                        // Self-closing: nothing more to emit on completion.
+                        // Self-closing: mark as native-handled so the
+                        // completion/error branches below skip the markdown
+                        // fallback (which would dump the raw JSON).
+                        nativeToolIds.add(callID);
                       } else {
                         // Fallback for unknown tools: keep the old markdown
                         // header so behavior degrades gracefully.
@@ -898,7 +901,13 @@ export function createOpenCodeProvider(
                         openedTools.delete(callID);
                         const output = tool.state.output || "";
 
-                        if (toolName === "write" || toolName === "edit") {
+                        if (
+                          toolName === "write" ||
+                          toolName === "edit" ||
+                          toolName === "todowrite" ||
+                          toolName === "todo" ||
+                          toolName === "todoread"
+                        ) {
                           // Already closed inline above; nothing more to emit.
                         } else if (toolName === "read") {
                           emit(
