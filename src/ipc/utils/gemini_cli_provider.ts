@@ -8,8 +8,11 @@ import {
 } from "../handlers/local_model_gemini_cli_handler";
 import {
   buildCliProjectContext,
+  buildConversationHistorySection,
   cleanupCliAttachments,
   extractCliUserMessageWithAttachments,
+  forceKillCliProcess,
+  unwrapCliFileReadContent,
 } from "./cli_context";
 
 const logger = log.scope("gemini_cli_provider");
@@ -84,6 +87,10 @@ let currentWorkingDirectory: string | undefined;
 let shouldResumeSession = false;
 let currentSessionKey: string | undefined;
 
+// Cross-app reference context (@app:Name mentions). Set per-turn by
+// chat_stream_handlers before spawning.
+let currentReferencedAppsContext: string | undefined;
+
 const initializedSessions = new Set<string>();
 
 function toRelativePath(filePath: string, cwd: string): string {
@@ -110,6 +117,11 @@ function formatToolOutput(output: string, maxLength: number): string {
   }
   return `${trimmed.substring(0, maxLength)}\n... (truncated)`;
 }
+
+// Re-exported for backwards compat — the actual logic moved to cli_context.ts
+// so both Gemini CLI and OpenCode (which use the same wrapper format) can
+// share it. Kept this thin wrapper to avoid touching the call sites.
+const unwrapGeminiFileContent = unwrapCliFileReadContent;
 
 /**
  * Extract a human-readable error message from tool_result events.
@@ -242,6 +254,16 @@ export function setGeminiCliSessionKey(key: string | undefined): void {
 }
 
 /**
+ * Set the @app:Name cross-app reference context for the next turn.
+ * Pass `undefined` to clear.
+ */
+export function setGeminiCliReferencedAppsContext(
+  text: string | undefined,
+): void {
+  currentReferencedAppsContext = text;
+}
+
+/**
  * Mark the current session as initialized (first message has been sent)
  */
 function markSessionInitialized(): void {
@@ -302,7 +324,14 @@ export function createGeminiCliProvider(
         // the -p prompt; remote URLs work the same way.
         const cwd = currentWorkingDirectory || process.cwd();
         const projectContext = buildCliProjectContext(cwd);
-        const extracted = extractCliUserMessageWithAttachments(prompt);
+        // On the FIRST call for this Dyad chat (no Gemini session to resume
+        // yet) include the prior conversation as context. Once `--resume
+        // latest` kicks in, Gemini carries its own history forward so we
+        // skip this block to avoid duplication.
+        const historyBlock = shouldResumeSession
+          ? ""
+          : buildConversationHistorySection(prompt);
+        const extracted = await extractCliUserMessageWithAttachments(prompt);
         const { text: rawMessage, imagePaths, imageUrls } = extracted;
         const mentions = [...imagePaths, ...imageUrls]
           .map((p) => `@${p}`)
@@ -310,9 +339,14 @@ export function createGeminiCliProvider(
         const promptWithImages = mentions
           ? `${mentions}\n\n${rawMessage}`
           : rawMessage;
-        const userMessage = projectContext
-          ? `${projectContext}\n\n${promptWithImages}`
-          : promptWithImages;
+        const userMessage = [
+          projectContext,
+          currentReferencedAppsContext,
+          historyBlock,
+          promptWithImages,
+        ]
+          .filter((s) => s && s.length > 0)
+          .join("\n\n");
 
         return new Promise((resolve, reject) => {
           const geminiPath = getGeminiCliPath();
@@ -352,7 +386,7 @@ export function createGeminiCliProvider(
 
           if (abortSignal) {
             abortSignal.addEventListener("abort", () => {
-              geminiProcess.kill("SIGTERM");
+              forceKillCliProcess(geminiProcess, "Gemini CLI");
               reject(new Error("Aborted"));
               // NOTE: don't cleanup here — the `close` handler will run.
             });
@@ -364,11 +398,13 @@ export function createGeminiCliProvider(
 
           geminiProcess.on("error", (err) => {
             cleanupCliAttachments(imagePaths);
+            currentReferencedAppsContext = undefined;
             reject(err);
           });
 
           geminiProcess.on("close", (code) => {
             cleanupCliAttachments(imagePaths);
+            currentReferencedAppsContext = undefined;
             if (code !== 0) {
               reject(new Error(`Gemini CLI exited with code ${code}`));
               return;
@@ -431,7 +467,14 @@ export function createGeminiCliProvider(
         // @-mention inside the -p prompt — both local paths and URLs.
         const cwd = currentWorkingDirectory || process.cwd();
         const projectContext = buildCliProjectContext(cwd);
-        const extracted = extractCliUserMessageWithAttachments(prompt);
+        // On the FIRST call for this Dyad chat (no Gemini session to resume
+        // yet) include the prior conversation as context. Once `--resume
+        // latest` kicks in, Gemini carries its own history forward so we
+        // skip this block to avoid duplication.
+        const historyBlock = shouldResumeSession
+          ? ""
+          : buildConversationHistorySection(prompt);
+        const extracted = await extractCliUserMessageWithAttachments(prompt);
         const { text: rawMessage, imagePaths, imageUrls } = extracted;
         const mentions = [...imagePaths, ...imageUrls]
           .map((p) => `@${p}`)
@@ -439,9 +482,14 @@ export function createGeminiCliProvider(
         const promptWithImages = mentions
           ? `${mentions}\n\n${rawMessage}`
           : rawMessage;
-        const userMessage = projectContext
-          ? `${projectContext}\n\n${promptWithImages}`
-          : promptWithImages;
+        const userMessage = [
+          projectContext,
+          currentReferencedAppsContext,
+          historyBlock,
+          promptWithImages,
+        ]
+          .filter((s) => s && s.length > 0)
+          .join("\n\n");
 
         const geminiPath = getGeminiCliPath();
         const args = [
@@ -478,7 +526,7 @@ export function createGeminiCliProvider(
 
         if (abortSignal) {
           abortSignal.addEventListener("abort", () => {
-            geminiProcess.kill("SIGTERM");
+            forceKillCliProcess(geminiProcess, "Gemini CLI");
           });
         }
 
@@ -681,11 +729,23 @@ export function createGeminiCliProvider(
                           ? params.command
                           : JSON.stringify(params);
                       const command = stripShellWrapper(rawCommand);
-                      // Use the actual command (truncated) as the title
-                      const cmdTitle =
-                        command.length > 60
-                          ? `$ ${command.slice(0, 57)}...`
-                          : `$ ${command}`;
+                      // Detect package install commands so the UI conveys
+                      // "installing packages" instead of a raw shell prompt.
+                      const installMatch = command.match(
+                        /^(?:npm|pnpm|yarn)\s+(?:install|add|i)\s+(.+?)(?:\s+--[a-z-]+.*)?$/,
+                      );
+                      let cmdTitle: string;
+                      if (installMatch) {
+                        const pkgs = installMatch[1]
+                          .split(/\s+/)
+                          .filter((p) => !p.startsWith("-"))
+                          .join(" ");
+                        cmdTitle = `📦 Installing: ${pkgs}`;
+                      } else if (command.length > 60) {
+                        cmdTitle = `$ ${command.slice(0, 57)}...`;
+                      } else {
+                        cmdTitle = `$ ${command}`;
+                      }
                       const tag = `\n<dyad-output type="info" message="${escapeXmlAttr(cmdTitle)}">\n`;
                       controller.enqueue({
                         type: "text-delta",
@@ -717,11 +777,15 @@ export function createGeminiCliProvider(
                       const toolName = toolInfo?.name || "tool";
 
                       if (toolName === "read_file") {
-                        const content = getToolResultContent(
+                        const rawContent = getToolResultContent(
                           event,
-                          2000,
+                          4000,
                           "Error reading file",
                         );
+                        const content =
+                          event.status === "success"
+                            ? unwrapGeminiFileContent(rawContent)
+                            : rawContent;
                         controller.enqueue({
                           type: "text-delta",
                           id: textId,
@@ -855,6 +919,7 @@ export function createGeminiCliProvider(
 
             geminiProcess.on("error", (error) => {
               cleanupCliAttachments(imagePaths);
+              currentReferencedAppsContext = undefined;
               if (!streamClosed) {
                 streamClosed = true;
                 controller.error(error);
@@ -863,6 +928,7 @@ export function createGeminiCliProvider(
 
             geminiProcess.on("close", (code, signal) => {
               cleanupCliAttachments(imagePaths);
+              currentReferencedAppsContext = undefined;
               logger.info(
                 `Gemini CLI process closed - code: ${code}, signal: ${signal}, streamClosed: ${streamClosed}, bufferLength: ${buffer.length}`,
               );

@@ -136,14 +136,17 @@ import { getAiMessagesJsonIfWithinLimit } from "../utils/ai_messages_utils";
 import {
   setOpenCodeWorkingDirectory,
   setOpenCodeSessionKey,
+  setOpenCodeReferencedAppsContext,
 } from "../utils/opencode_cli_provider";
 import {
   setLettaWorkingDirectory,
   setLettaSessionKey,
+  setLettaReferencedAppsContext,
 } from "../utils/letta_cli_provider";
 import {
   setGeminiCliWorkingDirectory,
   setGeminiCliSessionKey,
+  setGeminiCliReferencedAppsContext,
 } from "../utils/gemini_cli_provider";
 import { readSettings } from "@/main/settings";
 import {
@@ -841,6 +844,42 @@ ${componentSnippet}
           logger.log(
             `Added ${mentionedAppsCodebases.length} mentioned app codebases`,
           );
+        }
+
+        // For CLI providers, the system-prompt path is stripped, so the
+        // @app:Name codebase context never reaches the model unless we
+        // explicitly hand it to them. Format the same data as a text block
+        // and push it via the provider's setter. Cleared on the next turn
+        // automatically by re-setting (or by passing undefined elsewhere).
+        if (
+          mentionedAppsCodebases.length > 0 &&
+          (selectedProvider === "opencode" ||
+            selectedProvider === "letta" ||
+            selectedProvider === "gemini_cli")
+        ) {
+          const cliReferencedAppsText = `[REFERENCED APP CONTEXT - other Dyad apps the user referenced via @app:Name]
+${mentionedAppsCodebases
+  .map(
+    ({ appName, codebaseInfo }) => `\n=== @app:${appName} ===\n${codebaseInfo}`,
+  )
+  .join("")}
+[END REFERENCED APP CONTEXT]`;
+          if (selectedProvider === "opencode") {
+            setOpenCodeReferencedAppsContext(cliReferencedAppsText);
+          } else if (selectedProvider === "letta") {
+            setLettaReferencedAppsContext(cliReferencedAppsText);
+          } else if (selectedProvider === "gemini_cli") {
+            setGeminiCliReferencedAppsContext(cliReferencedAppsText);
+          }
+        } else {
+          // Clear any stale context from a previous turn.
+          if (selectedProvider === "opencode") {
+            setOpenCodeReferencedAppsContext(undefined);
+          } else if (selectedProvider === "letta") {
+            setLettaReferencedAppsContext(undefined);
+          } else if (selectedProvider === "gemini_cli") {
+            setGeminiCliReferencedAppsContext(undefined);
+          }
         }
 
         logger.log(`Extracted codebase information from ${appPath}`);

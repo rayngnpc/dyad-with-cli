@@ -2,48 +2,19 @@ import { ipcMain } from "electron";
 import log from "electron-log";
 import { execSync } from "node:child_process";
 import type { LocalModel } from "../types";
+import { findCliBinary } from "../utils/cli_binary_discovery";
 
 type LocalModelListResponse = { models: LocalModel[] };
 
 const logger = log.scope("opencode_handler");
 
-// Default path to opencode CLI
+// Default path to opencode CLI — cross-platform discovery (Linux + macOS + Windows).
 export function getOpenCodePath(): string {
-  if (process.env.OPENCODE_PATH) return process.env.OPENCODE_PATH;
-
-  try {
-    const resolved = execSync(
-      "which opencode 2>/dev/null || command -v opencode 2>/dev/null",
-      {
-        encoding: "utf-8",
-        shell: "/bin/bash",
-      },
-    ).trim();
-    if (resolved) return resolved;
-  } catch {
-    // Fall through to common local paths.
-  }
-
-  const home = process.env.HOME || "";
-  const candidates = [
-    `${home}/bin/opencode`,
-    `${home}/bin/opencode-zsh`,
-    `${home}/.npm-global/bin/opencode`,
-    `${home}/.local/bin/opencode`,
-    "/usr/local/bin/opencode",
-    "/usr/bin/opencode",
-  ];
-
-  for (const candidate of candidates) {
-    try {
-      execSync(`test -x "${candidate}"`, { stdio: "ignore" });
-      return candidate;
-    } catch {
-      // try next
-    }
-  }
-
-  return "opencode";
+  return findCliBinary({
+    name: "opencode",
+    envVar: "OPENCODE_PATH",
+    aliases: ["opencode-zsh"],
+  });
 }
 
 /**

@@ -8,8 +8,10 @@ import {
 } from "../handlers/local_model_letta_handler";
 import {
   buildCliProjectContext,
+  buildConversationHistorySection,
   cleanupCliAttachments,
   extractCliUserMessageWithAttachments,
+  forceKillCliProcess,
 } from "./cli_context";
 
 /*
@@ -122,6 +124,10 @@ let currentWorkingDirectory: string | undefined;
 const sessionMap = new Map<string, string>();
 let currentSessionKey: string | undefined;
 
+// Cross-app reference context (@app:Name mentions). Set per-turn by
+// chat_stream_handlers before spawning.
+let currentReferencedAppsContext: string | undefined;
+
 /**
  * Set the working directory for Letta CLI operations
  */
@@ -141,6 +147,14 @@ export function setLettaSessionKey(key: string | undefined): void {
   if (key) {
     logger.info(`Letta session key set to: ${key}`);
   }
+}
+
+/**
+ * Set the @app:Name cross-app reference context for the next turn.
+ * Pass `undefined` to clear.
+ */
+export function setLettaReferencedAppsContext(text: string | undefined): void {
+  currentReferencedAppsContext = text;
 }
 
 /**
@@ -205,7 +219,7 @@ export function createLettaProvider(
         // can warn AND cleanup, instead of leaving stale temp files.
         const cwd = currentWorkingDirectory || process.cwd();
         const projectContext = buildCliProjectContext(cwd);
-        const extracted = extractCliUserMessageWithAttachments(prompt);
+        const extracted = await extractCliUserMessageWithAttachments(prompt);
         const { text: rawMessage, imagePaths, imageUrls } = extracted;
         if (imagePaths.length > 0 || imageUrls.length > 0) {
           logger.warn(
@@ -213,9 +227,23 @@ export function createLettaProvider(
           );
           cleanupCliAttachments(imagePaths);
         }
-        const userMessage = projectContext
-          ? `${projectContext}\n\n${rawMessage}`
-          : rawMessage;
+        // On the FIRST call for this Dyad chat (no Letta agent assigned
+        // yet) include prior conversation. Once an agent is in sessionMap,
+        // Letta carries history forward in the agent's memory.
+        const hasExistingSession = Boolean(
+          currentSessionKey && sessionMap.get(currentSessionKey),
+        );
+        const historyBlock = hasExistingSession
+          ? ""
+          : buildConversationHistorySection(prompt);
+        const userMessage = [
+          projectContext,
+          currentReferencedAppsContext,
+          historyBlock,
+          rawMessage,
+        ]
+          .filter((s) => s && s.length > 0)
+          .join("\n\n");
 
         return new Promise((resolve, reject) => {
           const lettaPath = getLettaPath();
@@ -251,7 +279,7 @@ export function createLettaProvider(
 
           if (abortSignal) {
             abortSignal.addEventListener("abort", () => {
-              lettaProcess.kill("SIGTERM");
+              forceKillCliProcess(lettaProcess, "Letta CLI");
               reject(new Error("Aborted"));
             });
           }
@@ -276,9 +304,13 @@ export function createLettaProvider(
             }
           });
 
-          lettaProcess.on("error", reject);
+          lettaProcess.on("error", (err) => {
+            currentReferencedAppsContext = undefined;
+            reject(err);
+          });
 
           lettaProcess.on("close", (code) => {
+            currentReferencedAppsContext = undefined;
             if (code !== 0) {
               reject(new Error(`Letta CLI exited with code ${code}`));
               return;
@@ -307,7 +339,7 @@ export function createLettaProvider(
         // can warn AND cleanup, instead of leaving stale temp files.
         const cwd = currentWorkingDirectory || process.cwd();
         const projectContext = buildCliProjectContext(cwd);
-        const extracted = extractCliUserMessageWithAttachments(prompt);
+        const extracted = await extractCliUserMessageWithAttachments(prompt);
         const { text: rawMessage, imagePaths, imageUrls } = extracted;
         if (imagePaths.length > 0 || imageUrls.length > 0) {
           logger.warn(
@@ -315,9 +347,23 @@ export function createLettaProvider(
           );
           cleanupCliAttachments(imagePaths);
         }
-        const userMessage = projectContext
-          ? `${projectContext}\n\n${rawMessage}`
-          : rawMessage;
+        // On the FIRST call for this Dyad chat (no Letta agent assigned
+        // yet) include prior conversation. Once an agent is in sessionMap,
+        // Letta carries history forward in the agent's memory.
+        const hasExistingSession = Boolean(
+          currentSessionKey && sessionMap.get(currentSessionKey),
+        );
+        const historyBlock = hasExistingSession
+          ? ""
+          : buildConversationHistorySection(prompt);
+        const userMessage = [
+          projectContext,
+          currentReferencedAppsContext,
+          historyBlock,
+          rawMessage,
+        ]
+          .filter((s) => s && s.length > 0)
+          .join("\n\n");
 
         const lettaPath = getLettaPath();
         const args = ["-p", userMessage, "--output-format", "stream-json"];
@@ -348,7 +394,7 @@ export function createLettaProvider(
 
         if (abortSignal) {
           abortSignal.addEventListener("abort", () => {
-            lettaProcess.kill("SIGTERM");
+            forceKillCliProcess(lettaProcess, "Letta CLI");
           });
         }
 
@@ -728,6 +774,7 @@ export function createLettaProvider(
             });
 
             lettaProcess.on("error", (error) => {
+              currentReferencedAppsContext = undefined;
               if (!streamClosed) {
                 streamClosed = true;
                 controller.error(error);
@@ -735,6 +782,7 @@ export function createLettaProvider(
             });
 
             lettaProcess.on("close", (code) => {
+              currentReferencedAppsContext = undefined;
               // Process remaining buffer
               if (buffer.trim() && !streamClosed) {
                 try {

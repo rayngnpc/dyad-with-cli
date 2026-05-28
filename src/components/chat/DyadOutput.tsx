@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { AlertTriangle, XCircle, Sparkles } from "lucide-react";
+import { AlertTriangle, Info, XCircle, Sparkles } from "lucide-react";
 import { useAtomValue } from "jotai";
 import { selectedChatIdAtom, isStreamingByIdAtom } from "@/atoms/chatAtoms";
 import { useStreamChat } from "@/hooks/useStreamChat";
@@ -13,7 +13,7 @@ import {
 } from "./DyadCardPrimitives";
 
 interface DyadOutputProps {
-  type: "error" | "warning";
+  type: "error" | "warning" | "info";
   message?: string;
   children?: React.ReactNode;
 }
@@ -31,11 +31,22 @@ export const DyadOutput: React.FC<DyadOutputProps> = ({
     : false;
   const { streamMessage } = useStreamChat();
 
-  // If the type is not warning, it is an error (in case LLM gives a weird "type")
-  const isError = type !== "warning";
-  const accentColor = isError ? "red" : "amber";
-  const icon = isError ? <XCircle size={15} /> : <AlertTriangle size={15} />;
-  const label = isError ? "Error" : "Warning";
+  // Three known types: error / warning / info. Unknown types default to
+  // error (defensive — mirrors prior behaviour but no longer mis-labels
+  // info-type cards that CLI providers use heavily for non-error tools
+  // like bash, todo, grep, install detection, etc.).
+  const isWarning = type === "warning";
+  const isInfo = type === "info";
+  const isError = !isWarning && !isInfo;
+  const accentColor = isError ? "red" : isWarning ? "amber" : "blue";
+  const icon = isError ? (
+    <XCircle size={15} />
+  ) : isWarning ? (
+    <AlertTriangle size={15} />
+  ) : (
+    <Info size={15} />
+  );
+  const label = isError ? "Error" : isWarning ? "Warning" : "Info";
 
   const handleAIFix = (e: React.MouseEvent) => {
     e.stopPropagation();

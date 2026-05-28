@@ -2,47 +2,19 @@ import { execSync, spawn } from "node:child_process";
 import { ipcMain } from "electron";
 import log from "electron-log";
 import type { LocalModel } from "../types";
+import { findCliBinary } from "../utils/cli_binary_discovery";
 
 type LocalModelListResponse = { models: LocalModel[] };
 
 const logger = log.scope("gemini_cli_handler");
 
-// Default path to gemini CLI - can be overridden with GEMINI_CLI_PATH env var
+// Default path to gemini CLI — cross-platform discovery (Linux + macOS + Windows).
+// Override with the GEMINI_CLI_PATH env var.
 export function getGeminiCliPath(): string {
-  if (process.env.GEMINI_CLI_PATH) return process.env.GEMINI_CLI_PATH;
-
-  try {
-    const resolved = execSync(
-      "which gemini 2>/dev/null || command -v gemini 2>/dev/null",
-      {
-        encoding: "utf-8",
-        shell: "/bin/bash",
-      },
-    ).trim();
-    if (resolved) return resolved;
-  } catch {
-    // Fall through to common local paths.
-  }
-
-  const home = process.env.HOME || "";
-  const candidates = [
-    `${home}/bin/gemini`,
-    `${home}/.npm-global/bin/gemini`,
-    `${home}/.local/bin/gemini`,
-    "/usr/local/bin/gemini",
-    "/usr/bin/gemini",
-  ];
-
-  for (const candidate of candidates) {
-    try {
-      execSync(`test -x "${candidate}"`, { stdio: "ignore" });
-      return candidate;
-    } catch {
-      // try next
-    }
-  }
-
-  return "gemini";
+  return findCliBinary({
+    name: "gemini",
+    envVar: "GEMINI_CLI_PATH",
+  });
 }
 
 /**

@@ -123,6 +123,7 @@
     "react-virtuoso": "^4.17.0",
     "recast": "^0.23.11",
     "remark-gfm": "^4.0.1",
+    "sharp": "^0.34.5",
     "shell-env": "^4.0.1",
     "shiki": "^3.2.1",
     "sonner": "^2.0.3",

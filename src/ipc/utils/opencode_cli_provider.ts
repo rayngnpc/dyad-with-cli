@@ -8,8 +8,11 @@ import {
 } from "../handlers/local_model_opencode_handler";
 import {
   buildCliProjectContext,
+  buildConversationHistorySection,
   cleanupCliAttachments,
   extractCliUserMessageWithAttachments,
+  forceKillCliProcess,
+  unwrapCliFileReadContent,
 } from "./cli_context";
 import { readSettings } from "../../main/settings";
 
@@ -270,6 +273,10 @@ let currentWorkingDirectory: string | undefined;
 const sessionMap = new Map<string, string>();
 let currentSessionKey: string | undefined;
 
+// Cross-app reference context (@app:Name mentions). Set per-turn by
+// chat_stream_handlers before spawning; cleared after the turn completes.
+let currentReferencedAppsContext: string | undefined;
+
 /**
  * Set the working directory for OpenCode CLI operations
  */
@@ -289,6 +296,18 @@ export function setOpenCodeSessionKey(key: string | undefined): void {
   if (key) {
     logger.info(`OpenCode session key set to: ${key}`);
   }
+}
+
+/**
+ * Set the @app:Name cross-app reference context for the next turn.
+ * chat_stream_handlers formats the codebases of any apps referenced in
+ * the user's message and passes them here so the model has context for
+ * those other apps. Pass `undefined` to clear.
+ */
+export function setOpenCodeReferencedAppsContext(
+  text: string | undefined,
+): void {
+  currentReferencedAppsContext = text;
 }
 
 /**
@@ -366,7 +385,7 @@ export function createOpenCodeProvider(
         // Image attachments are written to temp files and passed via `-f`.
         const cwd = currentWorkingDirectory || process.cwd();
         const projectContext = buildCliProjectContext(cwd);
-        const extracted = extractCliUserMessageWithAttachments(prompt);
+        const extracted = await extractCliUserMessageWithAttachments(prompt);
         const { text: rawMessage, imagePaths, imageUrls } = extracted;
         if (imageUrls.length > 0) {
           // OpenCode `-f` is a local-file flag; remote URLs aren't supported.
@@ -374,9 +393,23 @@ export function createOpenCodeProvider(
             `OpenCode CLI: ${imageUrls.length} remote image URL(s) dropped (OpenCode -f does not support URLs)`,
           );
         }
-        const userMessage = projectContext
-          ? `${projectContext}\n\n${rawMessage}`
-          : rawMessage;
+        // On the FIRST call for this Dyad chat (no OpenCode session yet)
+        // include prior conversation. Once we have a session ID, OpenCode
+        // carries history forward on its side so we skip this block.
+        const hasExistingSession = Boolean(
+          currentSessionKey && sessionMap.get(currentSessionKey),
+        );
+        const historyBlock = hasExistingSession
+          ? ""
+          : buildConversationHistorySection(prompt);
+        const userMessage = [
+          projectContext,
+          currentReferencedAppsContext,
+          historyBlock,
+          rawMessage,
+        ]
+          .filter((s) => s && s.length > 0)
+          .join("\n\n");
 
         return new Promise((resolve, reject) => {
           const opencodePath = getOpenCodePath();
@@ -403,9 +436,15 @@ export function createOpenCodeProvider(
             }
           }
 
-          // Attach images via `-f <path>` BEFORE the prompt message.
-          for (const p of imagePaths) {
-            args.push("-f", p);
+          // Attach images via `-f <path>` BEFORE the prompt message. See
+          // doStream above for why the `--` delimiter is required when
+          // attachments are present (OpenCode's `-f` is array-typed and
+          // greedily consumes the next positional otherwise).
+          if (imagePaths.length > 0) {
+            for (const p of imagePaths) {
+              args.push("-f", p);
+            }
+            args.push("--");
           }
 
           args.push(userMessage);
@@ -425,7 +464,7 @@ export function createOpenCodeProvider(
 
           if (abortSignal) {
             abortSignal.addEventListener("abort", () => {
-              opencodeProcess.kill("SIGTERM");
+              forceKillCliProcess(opencodeProcess, "OpenCode");
               reject(new Error("Aborted"));
               // NOTE: don't cleanup here — the `close` handler will run.
             });
@@ -454,11 +493,13 @@ export function createOpenCodeProvider(
 
           opencodeProcess.on("error", (err) => {
             cleanupCliAttachments(imagePaths);
+            currentReferencedAppsContext = undefined;
             reject(err);
           });
 
           opencodeProcess.on("close", (code) => {
             cleanupCliAttachments(imagePaths);
+            currentReferencedAppsContext = undefined;
             if (code !== 0) {
               reject(new Error(`OpenCode CLI exited with code ${code}`));
               return;
@@ -485,7 +526,7 @@ export function createOpenCodeProvider(
         // Image attachments are written to temp files and passed via `-f`.
         const cwd = currentWorkingDirectory || process.cwd();
         const projectContext = buildCliProjectContext(cwd);
-        const extracted = extractCliUserMessageWithAttachments(prompt);
+        const extracted = await extractCliUserMessageWithAttachments(prompt);
         const { text: rawMessage, imagePaths, imageUrls } = extracted;
         if (imageUrls.length > 0) {
           // OpenCode `-f` is a local-file flag; remote URLs aren't supported.
@@ -493,9 +534,23 @@ export function createOpenCodeProvider(
             `OpenCode CLI: ${imageUrls.length} remote image URL(s) dropped (OpenCode -f does not support URLs)`,
           );
         }
-        const userMessage = projectContext
-          ? `${projectContext}\n\n${rawMessage}`
-          : rawMessage;
+        // On the FIRST call for this Dyad chat (no OpenCode session yet)
+        // include prior conversation. Once we have a session ID, OpenCode
+        // carries history forward on its side so we skip this block.
+        const hasExistingSession = Boolean(
+          currentSessionKey && sessionMap.get(currentSessionKey),
+        );
+        const historyBlock = hasExistingSession
+          ? ""
+          : buildConversationHistorySection(prompt);
+        const userMessage = [
+          projectContext,
+          currentReferencedAppsContext,
+          historyBlock,
+          rawMessage,
+        ]
+          .filter((s) => s && s.length > 0)
+          .join("\n\n");
 
         const opencodePath = getOpenCodePath();
         const args = ["run", "--format", "json"];
@@ -521,9 +576,17 @@ export function createOpenCodeProvider(
           }
         }
 
-        // Attach images via `-f <path>` BEFORE the prompt message.
-        for (const p of imagePaths) {
-          args.push("-f", p);
+        // Attach images via `-f <path>` BEFORE the prompt message. OpenCode
+        // declares `-f` as a yargs `array`-type flag, which greedily consumes
+        // subsequent positional args as additional file paths until it sees
+        // another flag. Without an explicit `--` delimiter, the user message
+        // gets swallowed as the next "file" — yielding "File not found: <user
+        // message>" errors when attachments are present.
+        if (imagePaths.length > 0) {
+          for (const p of imagePaths) {
+            args.push("-f", p);
+          }
+          args.push("--");
         }
 
         args.push(userMessage);
@@ -539,7 +602,7 @@ export function createOpenCodeProvider(
 
         if (abortSignal) {
           abortSignal.addEventListener("abort", () => {
-            opencodeProcess.kill("SIGTERM");
+            forceKillCliProcess(opencodeProcess, "OpenCode");
           });
         }
 
@@ -748,12 +811,26 @@ export function createOpenCodeProvider(
                           typeof input.command === "string"
                             ? input.command
                             : "";
-                        const cmdTitle =
-                          command.length > 60
-                            ? `$ ${command.slice(0, 57)}...`
-                            : command
-                              ? `$ ${command}`
-                              : "Running command";
+                        // Recognize npm/pnpm/yarn install commands and label
+                        // them more clearly so the UI conveys "installing
+                        // packages" rather than just a shell prompt.
+                        const installMatch = command.match(
+                          /^(?:(?:npm|pnpm)\s+(?:install|add|i)|yarn\s+(?:install|add))\s+(.+?)(?:\s+--[a-z-]+.*)?$/,
+                        );
+                        let cmdTitle: string;
+                        if (installMatch) {
+                          const pkgs = installMatch[1]
+                            .split(/\s+/)
+                            .filter((p) => !p.startsWith("-"))
+                            .join(" ");
+                          cmdTitle = `📦 Installing: ${pkgs}`;
+                        } else if (command.length > 60) {
+                          cmdTitle = `$ ${command.slice(0, 57)}...`;
+                        } else if (command) {
+                          cmdTitle = `$ ${command}`;
+                        } else {
+                          cmdTitle = "Running command";
+                        }
                         emit(
                           `\n<dyad-output type="info" message="${escapeXmlAttr(cmdTitle)}">\n`,
                         );
@@ -812,7 +889,47 @@ export function createOpenCodeProvider(
                         emit(
                           `\n<dyad-output type="info" message="${escapeXmlAttr(summary)}">\n${lines}\n</dyad-output>\n`,
                         );
-                        // Self-closing: nothing more to emit on completion.
+                        // Self-closing: mark as native-handled so the
+                        // completion/error branches below skip the markdown
+                        // fallback (which would dump the raw JSON).
+                        nativeToolIds.add(callID);
+                      } else if (toolName.startsWith("mcp_")) {
+                        // MCP tool calls — show a clean info card with the
+                        // tool name (stripped of the `mcp_` prefix). The full
+                        // input/output dumps to chat are too noisy for the
+                        // common case (user just wants to see the tool fired).
+                        const mcpName = toolName.replace(/^mcp_/, "");
+                        const title = tool.state.title || mcpName;
+                        emit(
+                          `\n<dyad-output type="info" message="${escapeXmlAttr(`MCP: ${title}`)}">\n`,
+                        );
+                        nativeToolIds.add(callID);
+                      } else if (
+                        toolName.startsWith("lsp_") ||
+                        toolName.endsWith("_check") ||
+                        toolName === "typecheck" ||
+                        toolName === "typescript_check"
+                      ) {
+                        const title = tool.state.title || toolName;
+                        emit(
+                          `\n<dyad-output type="info" message="${escapeXmlAttr(`LSP: ${title}`)}">\n`,
+                        );
+                        nativeToolIds.add(callID);
+                      } else if (
+                        toolName === "skill" ||
+                        toolName.startsWith("load_skill") ||
+                        toolName === "loadskill"
+                      ) {
+                        // Skill loading — show the skill name only. The skill
+                        // body is huge and not interesting to the user.
+                        const skillName =
+                          typeof input.name === "string"
+                            ? input.name
+                            : tool.state.title || "skill";
+                        emit(
+                          `\n<dyad-output type="info" message="${escapeXmlAttr(`Skill loaded: ${skillName}`)}">\n`,
+                        );
+                        nativeToolIds.add(callID);
                       } else {
                         // Fallback for unknown tools: keep the old markdown
                         // header so behavior degrades gracefully.
@@ -838,11 +955,21 @@ export function createOpenCodeProvider(
                         openedTools.delete(callID);
                         const output = tool.state.output || "";
 
-                        if (toolName === "write" || toolName === "edit") {
+                        if (
+                          toolName === "write" ||
+                          toolName === "edit" ||
+                          toolName === "todowrite" ||
+                          toolName === "todo" ||
+                          toolName === "todoread"
+                        ) {
                           // Already closed inline above; nothing more to emit.
                         } else if (toolName === "read") {
+                          // OpenCode's `read` returns the same
+                          // <path>/<type>/<content> wrapper Gemini does —
+                          // unwrap it so the card shows the file's actual
+                          // text rather than the XML scaffolding.
                           emit(
-                            `${truncateOutput(output, 2000)}\n</dyad-read>\n`,
+                            `${truncateOutput(unwrapCliFileReadContent(output), 2000)}\n</dyad-read>\n`,
                           );
                         } else if (toolName === "glob" || toolName === "list") {
                           emit(
@@ -855,6 +982,31 @@ export function createOpenCodeProvider(
                         ) {
                           emit(
                             `${truncateOutput(output, 1500)}\n</dyad-output>\n`,
+                          );
+                        } else if (
+                          toolName.startsWith("mcp_") ||
+                          toolName.startsWith("lsp_") ||
+                          toolName.endsWith("_check") ||
+                          toolName === "typecheck" ||
+                          toolName === "typescript_check"
+                        ) {
+                          // MCP / LSP / type-check: show truncated output
+                          // (these often return large JSON or diagnostic
+                          // arrays — keep the card scannable).
+                          emit(
+                            `${truncateOutput(output, 600)}\n</dyad-output>\n`,
+                          );
+                        } else if (
+                          toolName === "skill" ||
+                          toolName.startsWith("load_skill") ||
+                          toolName === "loadskill"
+                        ) {
+                          // Skill body is verbose markdown — show a short
+                          // preview only so the card doesn't dominate the
+                          // chat. Full skill content lives in the CLI's
+                          // context window, not the user-visible chat.
+                          emit(
+                            `${truncateOutput(output, 200)}\n</dyad-output>\n`,
                           );
                         } else if (toolName === "webfetch") {
                           emit(
@@ -907,7 +1059,15 @@ export function createOpenCodeProvider(
                         } else if (
                           toolName === "grep" ||
                           toolName === "bash" ||
-                          toolName === "task"
+                          toolName === "task" ||
+                          toolName.startsWith("mcp_") ||
+                          toolName.startsWith("lsp_") ||
+                          toolName.endsWith("_check") ||
+                          toolName === "typecheck" ||
+                          toolName === "typescript_check" ||
+                          toolName === "skill" ||
+                          toolName.startsWith("load_skill") ||
+                          toolName === "loadskill"
                         ) {
                           emit(`\n</dyad-output>\n`);
                         } else if (toolName === "webfetch") {
@@ -970,6 +1130,7 @@ export function createOpenCodeProvider(
 
             opencodeProcess.on("error", (error) => {
               cleanupCliAttachments(imagePaths);
+              currentReferencedAppsContext = undefined;
               if (!streamClosed) {
                 streamClosed = true;
                 controller.error(error);
@@ -978,6 +1139,7 @@ export function createOpenCodeProvider(
 
             opencodeProcess.on("close", (code) => {
               cleanupCliAttachments(imagePaths);
+              currentReferencedAppsContext = undefined;
               // Process remaining buffer
               if (buffer.trim() && !streamClosed) {
                 try {
