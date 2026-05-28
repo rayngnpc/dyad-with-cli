@@ -435,9 +435,15 @@ export function createOpenCodeProvider(
             }
           }
 
-          // Attach images via `-f <path>` BEFORE the prompt message.
-          for (const p of imagePaths) {
-            args.push("-f", p);
+          // Attach images via `-f <path>` BEFORE the prompt message. See
+          // doStream above for why the `--` delimiter is required when
+          // attachments are present (OpenCode's `-f` is array-typed and
+          // greedily consumes the next positional otherwise).
+          if (imagePaths.length > 0) {
+            for (const p of imagePaths) {
+              args.push("-f", p);
+            }
+            args.push("--");
           }
 
           args.push(userMessage);
@@ -567,9 +573,17 @@ export function createOpenCodeProvider(
           }
         }
 
-        // Attach images via `-f <path>` BEFORE the prompt message.
-        for (const p of imagePaths) {
-          args.push("-f", p);
+        // Attach images via `-f <path>` BEFORE the prompt message. OpenCode
+        // declares `-f` as a yargs `array`-type flag, which greedily consumes
+        // subsequent positional args as additional file paths until it sees
+        // another flag. Without an explicit `--` delimiter, the user message
+        // gets swallowed as the next "file" — yielding "File not found: <user
+        // message>" errors when attachments are present.
+        if (imagePaths.length > 0) {
+          for (const p of imagePaths) {
+            args.push("-f", p);
+          }
+          args.push("--");
         }
 
         args.push(userMessage);
