@@ -11,6 +11,7 @@ import {
   buildConversationHistorySection,
   cleanupCliAttachments,
   extractCliUserMessageWithAttachments,
+  forceKillCliProcess,
 } from "./cli_context";
 import { readSettings } from "../../main/settings";
 
@@ -456,7 +457,7 @@ export function createOpenCodeProvider(
 
           if (abortSignal) {
             abortSignal.addEventListener("abort", () => {
-              opencodeProcess.kill("SIGTERM");
+              forceKillCliProcess(opencodeProcess, "OpenCode");
               reject(new Error("Aborted"));
               // NOTE: don't cleanup here — the `close` handler will run.
             });
@@ -584,7 +585,7 @@ export function createOpenCodeProvider(
 
         if (abortSignal) {
           abortSignal.addEventListener("abort", () => {
-            opencodeProcess.kill("SIGTERM");
+            forceKillCliProcess(opencodeProcess, "OpenCode");
           });
         }
 

@@ -11,6 +11,7 @@ import {
   buildConversationHistorySection,
   cleanupCliAttachments,
   extractCliUserMessageWithAttachments,
+  forceKillCliProcess,
 } from "./cli_context";
 
 /*
@@ -278,7 +279,7 @@ export function createLettaProvider(
 
           if (abortSignal) {
             abortSignal.addEventListener("abort", () => {
-              lettaProcess.kill("SIGTERM");
+              forceKillCliProcess(lettaProcess, "Letta CLI");
               reject(new Error("Aborted"));
             });
           }
@@ -389,7 +390,7 @@ export function createLettaProvider(
 
         if (abortSignal) {
           abortSignal.addEventListener("abort", () => {
-            lettaProcess.kill("SIGTERM");
+            forceKillCliProcess(lettaProcess, "Letta CLI");
           });
         }
 

@@ -1,10 +1,55 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import type { ChildProcess } from "node:child_process";
 import { app } from "electron";
 import log from "electron-log";
 
 const logger = log.scope("cli_context");
+
+/**
+ * Forcefully terminate a CLI subprocess on abort.
+ *
+ * Background: when a user stops a chat mid-stream in Dyad, we send
+ * SIGTERM to the CLI subprocess. Some CLIs (notably Gemini CLI) catch
+ * SIGTERM and continue running their current HTTP request — which may
+ * be stuck in an internal exponential-backoff retry loop after a 429.
+ * The process visibly keeps firing API calls in the terminal long
+ * after the user clicked Stop.
+ *
+ * This helper:
+ *   1. Sends SIGTERM (polite — lets the CLI clean up state)
+ *   2. After `gracePeriodMs` (default 2s), if the process is still
+ *      alive, sends SIGKILL (forceful — bypasses signal handlers)
+ *
+ * Safe to call multiple times and on already-exited processes — guards
+ * against `proc.killed` / `proc.exitCode !== null`.
+ */
+export function forceKillCliProcess(
+  proc: ChildProcess | undefined | null,
+  label: string,
+  gracePeriodMs = 2000,
+): void {
+  if (!proc) return;
+  if (proc.killed || proc.exitCode !== null) return;
+  try {
+    proc.kill("SIGTERM");
+  } catch (e) {
+    logger.debug(`${label}: SIGTERM threw: ${(e as Error).message}`);
+  }
+  setTimeout(() => {
+    if (!proc.killed && proc.exitCode === null) {
+      logger.warn(
+        `${label}: SIGTERM did not terminate process within ${gracePeriodMs}ms — escalating to SIGKILL`,
+      );
+      try {
+        proc.kill("SIGKILL");
+      } catch (e) {
+        logger.debug(`${label}: SIGKILL threw: ${(e as Error).message}`);
+      }
+    }
+  }, gracePeriodMs);
+}
 
 /**
  * Key config files to read for CLI provider context.

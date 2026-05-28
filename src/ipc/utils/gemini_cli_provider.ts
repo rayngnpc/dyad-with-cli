@@ -11,6 +11,7 @@ import {
   buildConversationHistorySection,
   cleanupCliAttachments,
   extractCliUserMessageWithAttachments,
+  forceKillCliProcess,
 } from "./cli_context";
 
 const logger = log.scope("gemini_cli_provider");
@@ -379,7 +380,7 @@ export function createGeminiCliProvider(
 
           if (abortSignal) {
             abortSignal.addEventListener("abort", () => {
-              geminiProcess.kill("SIGTERM");
+              forceKillCliProcess(geminiProcess, "Gemini CLI");
               reject(new Error("Aborted"));
               // NOTE: don't cleanup here — the `close` handler will run.
             });
@@ -517,7 +518,7 @@ export function createGeminiCliProvider(
 
         if (abortSignal) {
           abortSignal.addEventListener("abort", () => {
-            geminiProcess.kill("SIGTERM");
+            forceKillCliProcess(geminiProcess, "Gemini CLI");
           });
         }
 
