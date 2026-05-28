@@ -118,6 +118,35 @@ function formatToolOutput(output: string, maxLength: number): string {
 }
 
 /**
+ * Gemini CLI's read_file tool returns output wrapped in pseudo-XML:
+ *
+ *   <path>/abs/path/to/file</path> <type>file</type> <content>
+ *   1: line one
+ *   2: line two
+ *   3: line three
+ *   </content>
+ *
+ * Embedding this verbatim inside <dyad-read> makes the chat UI render
+ * the wrapper tags and line-number prefixes as raw text. This helper
+ * extracts just the file body and strips the "N: " prefix so the card
+ * shows the file's actual contents (matching API-provider rendering).
+ *
+ * Falls through to the raw output for unrecognized formats so we never
+ * accidentally truncate non-wrapped output.
+ */
+function unwrapGeminiFileContent(raw: string): string {
+  const match = raw.match(/<content>([\s\S]*?)<\/content>/);
+  if (!match) return raw;
+  const inner = match[1].trim();
+  // Strip leading line-number prefixes ("  1: ", "12: ", etc.).
+  const stripped = inner
+    .split("\n")
+    .map((line) => line.replace(/^\s*\d+:\s?/, ""))
+    .join("\n");
+  return stripped;
+}
+
+/**
  * Extract a human-readable error message from tool_result events.
  * Gemini CLI v0.34.0+ sends error as { type, message } object, not a string.
  */
@@ -769,11 +798,15 @@ export function createGeminiCliProvider(
                       const toolName = toolInfo?.name || "tool";
 
                       if (toolName === "read_file") {
-                        const content = getToolResultContent(
+                        const rawContent = getToolResultContent(
                           event,
-                          2000,
+                          4000,
                           "Error reading file",
                         );
+                        const content =
+                          event.status === "success"
+                            ? unwrapGeminiFileContent(rawContent)
+                            : rawContent;
                         controller.enqueue({
                           type: "text-delta",
                           id: textId,
