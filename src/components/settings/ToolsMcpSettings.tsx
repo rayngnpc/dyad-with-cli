@@ -534,7 +534,16 @@ export function ToolsMcpSettings() {
                         }
                       >
                         <SelectTrigger className="w-[140px] h-8">
-                          <SelectValue />
+                          <SelectValue>
+                            {(value: string | null) => {
+                              const labels: Record<string, string> = {
+                                ask: "Ask",
+                                always: "Always allow",
+                                denied: "Deny",
+                              };
+                              return value ? (labels[value] ?? value) : "Ask";
+                            }}
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="ask">Ask</SelectItem>

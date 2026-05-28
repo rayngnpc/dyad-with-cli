@@ -116,3 +116,8 @@ storybook-static/
 
 # Letta CLI local config
 .letta/
+
+# MCP development docs (copies live in ~/Dyad-Project/dyad-mcp/docs/)
+MCP_MASTER.md
+MCP_TEAM_HANDOFF.md
+implementationplan.md

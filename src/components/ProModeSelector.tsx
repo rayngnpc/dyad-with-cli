@@ -63,8 +63,9 @@ export function ProModeSelector() {
     });
   };
 
-  const hasProKey = settings ? hasDyadProKey(settings) : false;
-  const proModeTogglable = hasProKey && Boolean(settings?.enableDyadPro);
+  // Local fork: Pro always enabled
+  const hasProKey = true;
+  const proModeTogglable = true;
 
   return (
     <Popover>

@@ -353,6 +353,11 @@ const BaseUserSettingsFields = {
   enableContextCompaction: z.boolean().optional(),
   skipNotificationBanner: z.boolean().optional(),
   enableSelectAppFromHomeChatInput: z.boolean().optional(),
+
+  // MCP Server Bridge — exposes Dyad tools to external MCP clients
+  enableMcpServer: z.boolean().optional(),
+  mcpServerPort: z.number().int().min(1024).max(65535).optional(),
+  mcpServerEnableWriteTools: z.boolean().optional(),
 };
 
 /**
@@ -422,12 +427,14 @@ export function migrateStoredSettings(
   };
 }
 
-export function isDyadProEnabled(settings: UserSettings): boolean {
-  return settings.enableDyadPro === true && hasDyadProKey(settings);
+export function isDyadProEnabled(_settings: UserSettings): boolean {
+  // Local fork: Pro features always enabled
+  return true;
 }
 
-export function hasDyadProKey(settings: UserSettings): boolean {
-  return !!settings.providerSettings?.auto?.apiKey?.value;
+export function hasDyadProKey(_settings: UserSettings): boolean {
+  // Local fork: Pro features always enabled
+  return true;
 }
 
 /**

@@ -1,57 +1,53 @@
 import {
-  selectedAppIdAtom,
-  appUrlAtom,
   appConsoleEntriesAtom,
-  previewErrorMessageAtom,
+  appUrlAtom,
   previewCurrentUrlAtom,
+  previewErrorMessageAtom,
+  selectedAppIdAtom,
 } from "@/atoms/appAtoms";
-import { useAtomValue, useSetAtom, useAtom } from "jotai";
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ArrowLeft,
-  ArrowRight,
-  RefreshCw,
-  ExternalLink,
-  Loader2,
-  X,
-  Sparkles,
-  ChevronDown,
-  Lightbulb,
-  ChevronRight,
-  MousePointerClick,
-  Power,
-  MonitorSmartphone,
-  Monitor,
-  Tablet,
-  Smartphone,
-  Pen,
-  Maximize2,
-  Minimize2,
-} from "lucide-react";
 import { selectedChatIdAtom } from "@/atoms/chatAtoms";
 import { CopyErrorMessage } from "@/components/CopyErrorMessage";
 import { ipc } from "@/ipc/types";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import {
+  ArrowLeft,
+  ArrowRight,
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  Lightbulb,
+  Loader2,
+  Maximize2,
+  Minimize2,
+  Monitor,
+  MonitorSmartphone,
+  MousePointerClick,
+  Pen,
+  Power,
+  RefreshCw,
+  Smartphone,
+  Sparkles,
+  Tablet,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { useParseRouter } from "@/hooks/useParseRouter";
+import {
+  annotatorModeAtom,
+  currentComponentCoordinatesAtom,
+  pendingVisualChangesAtom,
+  previewIframeRefAtom,
+  screenshotDataUrlAtom,
+  selectedComponentsPreviewAtom,
+  visualEditingSelectedComponentAtom,
+} from "@/atoms/previewAtoms";
+import { isChatPanelHiddenAtom } from "@/atoms/viewAtoms";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useStreamChat } from "@/hooks/useStreamChat";
-import {
-  selectedComponentsPreviewAtom,
-  visualEditingSelectedComponentAtom,
-  currentComponentCoordinatesAtom,
-  previewIframeRefAtom,
-  annotatorModeAtom,
-  screenshotDataUrlAtom,
-  pendingVisualChangesAtom,
-} from "@/atoms/previewAtoms";
-import { isChatPanelHiddenAtom } from "@/atoms/viewAtoms";
-import { ComponentSelection } from "@/ipc/types";
-import { mergePendingChange } from "@/ipc/types/visual-editing";
 import {
   Popover,
   PopoverContent,
@@ -60,20 +56,22 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Tooltip,
-  TooltipTrigger,
   TooltipContent,
+  TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAttachments } from "@/hooks/useAttachments";
+import { useParseRouter } from "@/hooks/useParseRouter";
 import { useRunApp } from "@/hooks/useRunApp";
 import { useSettings } from "@/hooks/useSettings";
 import { useShortcut } from "@/hooks/useShortcut";
-import { cn } from "@/lib/utils";
-import { normalizePath } from "../../../shared/normalizePath";
-import { showError } from "@/lib/toast";
+import { useStreamChat } from "@/hooks/useStreamChat";
+import type { ComponentSelection } from "@/ipc/types";
+import { mergePendingChange } from "@/ipc/types/visual-editing";
 import type { DeviceMode } from "@/lib/schemas";
-import { AnnotatorOnlyForPro } from "./AnnotatorOnlyForPro";
-import { useAttachments } from "@/hooks/useAttachments";
-import { useUserBudgetInfo } from "@/hooks/useUserBudgetInfo";
+import { showError } from "@/lib/toast";
+import { cn } from "@/lib/utils";
 import { Annotator } from "@/pro/ui/components/Annotator/Annotator";
+import { normalizePath } from "../../../shared/normalizePath";
 import { VisualEditingToolbar } from "./VisualEditingToolbar";
 
 interface ErrorBannerProps {
@@ -185,7 +183,6 @@ export const PreviewIframe = ({ loading }: { loading: boolean }) => {
   const { routes: availableRoutes } = useParseRouter(selectedAppId);
   const { restartApp } = useRunApp();
   const { settings, updateSettings } = useSettings();
-  const { userBudget } = useUserBudgetInfo();
   const isProMode = true; // Enabled for local fork (originally: !!userBudget)
 
   // Preserved URL state (persists across HMR-induced remounts)
@@ -214,6 +211,7 @@ export const PreviewIframe = ({ loading }: { loading: boolean }) => {
   const setSelectedComponentsPreview = useSetAtom(
     selectedComponentsPreviewAtom,
   );
+  const selectedComponentsPreview = useAtomValue(selectedComponentsPreviewAtom);
   const [visualEditingSelectedComponent, setVisualEditingSelectedComponent] =
     useAtom(visualEditingSelectedComponentAtom);
   const setCurrentComponentCoordinates = useSetAtom(
@@ -233,7 +231,101 @@ export const PreviewIframe = ({ loading }: { loading: boolean }) => {
     isChatPanelHiddenAtom,
   );
 
+  useEffect(() => {
+    if (!selectedAppId) {
+      return;
+    }
+
+    void ipc.mcpServer.syncSelectedComponents({
+      appId: selectedAppId,
+      selectedComponents: selectedComponentsPreview,
+    });
+  }, [selectedAppId, selectedComponentsPreview]);
+
+  // Auto-sync active project to MCP server so external clients (e.g. Antigravity)
+  // can use get_selected_components without manually calling set_active_project.
+  useEffect(() => {
+    if (!selectedAppId) {
+      return;
+    }
+
+    void ipc.app.getApp(selectedAppId).then((app) => {
+      void ipc.mcpServer.setActiveApp({
+        appId: app.id,
+        appPath: app.path,
+      });
+    });
+  }, [selectedAppId]);
+
+
+  // Listen for MCP screenshot requests from main process
+  useEffect(() => {
+    const unsubscribe = ipc.events.mcpServer.onRequestScreenshot(
+      (payload: { requestId: string }) => {
+        const iframe = iframeRef.current;
+        if (!iframe?.contentWindow) {
+          void ipc.mcpServer.screenshotResponse({
+            requestId: payload.requestId,
+            success: false,
+            error: "Preview iframe not available",
+          });
+          return;
+        }
+
+        const handleResponse = (event: MessageEvent) => {
+          if (event.data?.type !== "dyad-screenshot-response") return;
+          window.removeEventListener("message", handleResponse);
+
+          if (event.data.success && event.data.dataUrl) {
+            void ipc.mcpServer.screenshotResponse({
+              requestId: payload.requestId,
+              success: true,
+              dataUrl: event.data.dataUrl,
+            });
+          } else {
+            void ipc.mcpServer.screenshotResponse({
+              requestId: payload.requestId,
+              success: false,
+              error: event.data.error ?? "Screenshot capture failed",
+            });
+          }
+        };
+
+        window.addEventListener("message", handleResponse);
+        iframe.contentWindow.postMessage(
+          { type: "dyad-take-screenshot" },
+          "*",
+        );
+      },
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
   const { addAttachments } = useAttachments();
+
+  // Wrap addAttachments to also sync annotation data to main for MCP
+  const addAttachmentsWithAnnotationSync = useCallback(
+    (files: File[], type?: "chat-context" | "upload-to-codebase") => {
+      if (selectedAppId && files.length > 0 && files[0].type === "image/png") {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === "string") {
+            void ipc.mcpServer.syncAnnotation({
+              appId: selectedAppId,
+              dataUrl: reader.result,
+            });
+          }
+        };
+        reader.readAsDataURL(files[0]);
+      }
+      addAttachments(files, type);
+    },
+    [selectedAppId, addAttachments],
+  );
+
   const setPendingChanges = useSetAtom(pendingVisualChangesAtom);
 
   // AST Analysis State
@@ -299,7 +391,7 @@ export const PreviewIframe = ({ loading }: { loading: boolean }) => {
 
     // Parse componentId to extract file path and line number
     const [filePath, lineStr] = componentId.split(":");
-    const lineNumber = parseInt(lineStr, 10);
+    const lineNumber = Number.parseInt(lineStr, 10);
 
     if (!filePath || isNaN(lineNumber)) {
       console.error("Invalid componentId format:", componentId);
@@ -1381,17 +1473,12 @@ export const PreviewIframe = ({ loading }: { loading: boolean }) => {
                     : { width: `${deviceWidthConfig[deviceMode]}px` }
                 }
               >
-                {userBudget ? (
-                  <Annotator
-                    screenshotUrl={screenshotDataUrl}
-                    onSubmit={addAttachments}
-                    handleAnnotatorClick={handleAnnotatorClick}
-                  />
-                ) : (
-                  <AnnotatorOnlyForPro
-                    onGoBack={() => setAnnotatorMode(false)}
-                  />
-                )}
+                {/* Local fork: Pro always enabled, skip AnnotatorOnlyForPro gate */}
+                <Annotator
+                  screenshotUrl={screenshotDataUrl}
+                  onSubmit={addAttachmentsWithAnnotationSync}
+                  handleAnnotatorClick={handleAnnotatorClick}
+                />
               </div>
             ) : (
               <>
@@ -1470,8 +1557,8 @@ function parseComponentSelection(data: any): ComponentSelection | null {
     return null;
   }
 
-  const lineNumber = parseInt(lineStr, 10);
-  const columnNumber = parseInt(columnStr, 10);
+  const lineNumber = Number.parseInt(lineStr, 10);
+  const columnNumber = Number.parseInt(columnStr, 10);
 
   if (isNaN(lineNumber) || isNaN(columnNumber)) {
     console.error(`Could not parse line/column from id: "${id}"`);

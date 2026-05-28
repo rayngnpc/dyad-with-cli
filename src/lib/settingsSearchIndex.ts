@@ -7,6 +7,7 @@ export const SECTION_IDS = {
   integrations: "integrations",
   agentPermissions: "agent-permissions",
   toolsMcp: "tools-mcp",
+  mcpServer: "mcp-server",
   experiments: "experiments",
   dangerZone: "danger-zone",
 } as const;
@@ -36,6 +37,9 @@ export const SETTING_IDS = {
   enableMcpServersForBuildMode: "setting-enable-mcp-servers-for-build-mode",
   enableSelectAppFromHomeChatInput:
     "setting-enable-select-app-from-home-chat-input",
+  mcpServerEnable: "setting-mcp-server-enable",
+  mcpServerPort: "setting-mcp-server-port",
+  mcpServerWriteTools: "setting-mcp-server-write-tools",
   reset: "setting-reset",
 } as const;
 
@@ -312,6 +316,43 @@ export const SETTINGS_SEARCH_INDEX: SearchableSettingItem[] = [
     ],
     sectionId: SECTION_IDS.toolsMcp,
     sectionLabel: "Tools (MCP)",
+  },
+
+  // MCP Server Bridge
+  {
+    id: SETTING_IDS.mcpServerEnable,
+    label: "MCP Server",
+    description:
+      "Enable an MCP server that exposes Dyad tools to external AI clients",
+    keywords: [
+      "mcp",
+      "server",
+      "bridge",
+      "antigravity",
+      "cursor",
+      "claude",
+      "external",
+      "tools",
+    ],
+    sectionId: SECTION_IDS.mcpServer,
+    sectionLabel: "MCP Server",
+  },
+  {
+    id: SETTING_IDS.mcpServerPort,
+    label: "MCP Server Port",
+    description: "Port number for the MCP server",
+    keywords: ["port", "mcp", "server", "network"],
+    sectionId: SECTION_IDS.mcpServer,
+    sectionLabel: "MCP Server",
+  },
+  {
+    id: SETTING_IDS.mcpServerWriteTools,
+    label: "Allow Write Operations",
+    description:
+      "Allow external MCP clients to write files and modify the project",
+    keywords: ["write", "edit", "modify", "mcp", "permissions", "tools"],
+    sectionId: SECTION_IDS.mcpServer,
+    sectionLabel: "MCP Server",
   },
 
   // Experiments

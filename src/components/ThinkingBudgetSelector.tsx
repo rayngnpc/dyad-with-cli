@@ -66,7 +66,12 @@ export const ThinkingBudgetSelector: React.FC = () => {
           onValueChange={(v) => v && handleValueChange(v)}
         >
           <SelectTrigger className="w-[180px]" id="thinking-budget">
-            <SelectValue placeholder={t("ai.selectThinkingBudget")} />
+            <SelectValue placeholder={t("ai.selectThinkingBudget")}>
+              {(value: string | null) => {
+                const opt = options.find((o) => o.value === value);
+                return opt?.label ?? value ?? t("ai.selectThinkingBudget");
+              }}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {options.map((option) => (

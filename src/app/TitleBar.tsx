@@ -77,8 +77,9 @@ export const TitleBar = () => {
     }
   };
 
-  const isDyadPro = !!settings?.providerSettings?.auto?.apiKey?.value;
-  const isDyadProEnabled = Boolean(settings?.enableDyadPro);
+  // Local fork: Pro always enabled
+  const isDyadPro = true;
+  const isDyadProEnabled = true;
 
   return (
     <>

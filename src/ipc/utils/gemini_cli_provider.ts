@@ -334,6 +334,7 @@ export function createGeminiCliProvider(
           const geminiProcess = spawn(geminiPath, args, {
             stdio: ["ignore", "pipe", "pipe"],
             cwd: currentWorkingDirectory || process.cwd(),
+            env: { ...process.env, GEMINI_CLI_TRUST_WORKSPACE: "true" },
           });
 
           let output = "";
@@ -447,6 +448,7 @@ export function createGeminiCliProvider(
         const geminiProcess = spawn(geminiPath, args, {
           stdio: ["ignore", "pipe", "pipe"],
           cwd: currentWorkingDirectory || process.cwd(),
+          env: { ...process.env, GEMINI_CLI_TRUST_WORKSPACE: "true" },
         });
 
         if (abortSignal) {

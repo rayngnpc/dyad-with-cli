@@ -52,7 +52,11 @@ export function ZoomSelector() {
         }
       >
         <SelectTrigger id="zoom-level" className="w-[220px]">
-          <SelectValue placeholder={t("general.selectZoom")} />
+          <SelectValue placeholder={t("general.selectZoom")}>
+            {(value: string | null) =>
+              value ? (ZOOM_LEVEL_LABELS[value as ZoomLevel] ?? value) : t("general.selectZoom")
+            }
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           {Object.entries(ZOOM_LEVEL_LABELS).map(([value, label]) => (

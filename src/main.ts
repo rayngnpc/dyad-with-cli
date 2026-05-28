@@ -175,6 +175,15 @@ export async function onReady() {
   createWindow();
   createApplicationMenu();
 
+  // Auto-start MCP server if enabled in settings
+  if (settings.enableMcpServer) {
+    const port = settings.mcpServerPort ?? 31999;
+    logger.info("Auto-starting MCP server on port", port);
+    import("./ipc/utils/mcp_server_manager")
+      .then(({ mcpServerManager }) => mcpServerManager.start(port))
+      .catch((err) => logger.error("Failed to auto-start MCP server", err));
+  }
+
   logger.info("Auto-update enabled=", settings.enableAutoUpdate);
   if (settings.enableAutoUpdate) {
     // Technically we could just pass the releaseChannel directly to the host,

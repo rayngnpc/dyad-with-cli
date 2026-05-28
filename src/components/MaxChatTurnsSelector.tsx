@@ -83,7 +83,12 @@ export const MaxChatTurnsSelector: React.FC = () => {
           onValueChange={(v) => v && handleValueChange(v)}
         >
           <SelectTrigger className="w-[180px]" id="max-chat-turns">
-            <SelectValue placeholder={t("ai.selectMaxChatTurns")} />
+            <SelectValue placeholder={t("ai.selectMaxChatTurns")}>
+              {(value: string | null) => {
+                const opt = options.find((o) => o.value === value);
+                return opt?.label ?? value ?? t("ai.selectMaxChatTurns");
+              }}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {options.map((option) => (

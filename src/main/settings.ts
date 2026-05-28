@@ -44,6 +44,9 @@ const DEFAULT_SETTINGS: UserSettings = {
   enableNativeGit: true,
   autoExpandPreviewPanel: true,
   enableContextCompaction: true,
+  enableMcpServer: false,
+  mcpServerPort: undefined,
+  mcpServerEnableWriteTools: undefined,
 };
 
 const SETTINGS_FILE = "user-settings.json";

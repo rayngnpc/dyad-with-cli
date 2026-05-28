@@ -77,7 +77,12 @@ export const MaxToolCallStepsSelector: React.FC = () => {
           onValueChange={(v) => v && handleValueChange(v)}
         >
           <SelectTrigger className="w-[180px]" id="max-tool-call-steps">
-            <SelectValue placeholder={t("ai.selectMaxToolCallSteps")} />
+            <SelectValue placeholder={t("ai.selectMaxToolCallSteps")}>
+              {(value: string | null) => {
+                const opt = options.find((o) => o.value === value);
+                return opt?.label ?? value ?? t("ai.selectMaxToolCallSteps");
+              }}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {options.map((option) => (

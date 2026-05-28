@@ -124,12 +124,31 @@ function buildSnippetFromMatch({
   };
 }
 
-function getDefaultCommand(appId: number): string {
+function isNextJsProject(appPath: string): boolean {
+  try {
+    const pkgRaw = fs.readFileSync(
+      path.join(appPath, "package.json"),
+      "utf-8",
+    );
+    const pkg = JSON.parse(pkgRaw);
+    const deps = {
+      ...(pkg.dependencies || {}),
+      ...(pkg.devDependencies || {}),
+    };
+    return "next" in deps;
+  } catch {
+    return false;
+  }
+}
+
+function getDefaultCommand(appId: number, appPath: string): string {
   const port = getAppPort(appId);
   // --webpack: Disable Turbopack (Next.js 15.3+). Turbopack + Tailwind v4
   // causes unbounded memory growth during compilation (Next.js issue #91396).
-  // The flag is silently ignored by non-Next.js dev servers.
-  return `(pnpm install && pnpm run dev --port ${port} --webpack) || (npm install --legacy-peer-deps && npm run dev -- --port ${port} --webpack)`;
+  // Only applied for Next.js projects — Vite (and other CAC-based dev servers)
+  // reject unknown flags and crash.
+  const turbopackOverride = isNextJsProject(appPath) ? " --webpack" : "";
+  return `(pnpm install && pnpm run dev --port ${port}${turbopackOverride}) || (npm install --legacy-peer-deps && npm run dev -- --port ${port}${turbopackOverride})`;
 }
 async function copyDir(
   source: string,
@@ -212,7 +231,7 @@ async function executeAppLocalNode({
   installCommand?: string | null;
   startCommand?: string | null;
 }): Promise<void> {
-  const command = getCommand({ appId, installCommand, startCommand });
+  const command = getCommand({ appId, appPath, installCommand, startCommand });
   const escapedAppPath = appPath.replace(/"/g, '\\"');
   const commandWithExplicitCwd = `cd "${escapedAppPath}" && ${command}`;
   const spawnedProcess = spawn(commandWithExplicitCwd, [], {
@@ -584,7 +603,7 @@ RUN npm install -g pnpm
       `dyad-app-${appId}`,
       "sh",
       "-c",
-      getCommand({ appId, installCommand, startCommand }),
+      getCommand({ appId, appPath, installCommand, startCommand }),
     ],
     {
       stdio: "pipe",
@@ -2095,17 +2114,19 @@ export function registerAppHandlers() {
 
 function getCommand({
   appId,
+  appPath,
   installCommand,
   startCommand,
 }: {
   appId: number;
+  appPath: string;
   installCommand?: string | null;
   startCommand?: string | null;
 }) {
   const hasCustomCommands = !!installCommand?.trim() && !!startCommand?.trim();
   return hasCustomCommands
     ? `${installCommand!.trim()} && ${startCommand!.trim()}`
-    : getDefaultCommand(appId);
+    : getDefaultCommand(appId, appPath);
 }
 
 async function cleanUpPort(port: number) {
