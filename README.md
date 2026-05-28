@@ -1,54 +1,52 @@
-# Dyad — Local AI Agents Fork
+<div align="center">
 
-**A community fork of [Dyad](https://dyad.sh/) that adds native support for Gemini CLI, OpenCode, and Letta as first-class AI providers.**
+# Dyad with CLI
 
-The original Dyad supports cloud models (Claude, GPT, Gemini API) and basic local inference via Ollama/LM Studio. This fork adds three CLI-based agents that run entirely on your machine — no API key required for Gemini.
+**A community fork of [Dyad](https://dyad.sh) that adds native support for locally-run AI CLI agents.**
 
-> Community fork. For the official Dyad project, visit [dyad.sh](https://dyad.sh/).
+[![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](./LICENSE)
+[![Upstream](https://img.shields.io/badge/upstream-dyad--sh%2Fdyad%20v1.1.0-green.svg)](https://github.com/dyad-sh/dyad)
+[![Node](https://img.shields.io/badge/node-24%2B-brightgreen.svg)](https://nodejs.org)
+[![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macOS%20%7C%20windows-lightgrey.svg)]()
+
+</div>
 
 ---
 
-## What's Different in This Fork
+Dyad is an open-source AI app builder. This fork keeps everything the upstream project does and adds **three CLI-based AI agents** as first-class providers — letting you build with locally-run agents alongside the standard API-key flows.
 
-| Feature | Original Dyad | This Fork |
+> Community fork, not an official Dyad release.
+> For the upstream project, see **[dyad.sh](https://dyad.sh)**.
+
+## ✨ Highlights
+
+- **Three CLI providers** — Gemini CLI, OpenCode, and Letta available right in the model picker
+- **Native tool rendering** — file writes, edits, reads, shell commands, todos render as Dyad's native cards (no more raw JSON dumps)
+- **Image attachments** — Annotator screenshots flow through to vision-capable CLI models
+- **Sub-provider grouping** — OpenCode's many models organised by sub-provider in the picker
+- **MCP Server Bridge** *(experimental)* — opt-in HTTP server exposing Dyad's preview context to external MCP clients
+- **All upstream features preserved** — bring-your-own API keys, Ollama/LM Studio, Git versioning, Supabase integration, cross-platform builds
+
+## ⚠️ Gemini CLI deprecation notice
+
+**Gemini CLI support is scheduled for removal after 15 June 2026.** Google is deprecating the underlying Gemini CLI tool; this fork will drop the integration in a future release. **OpenCode and Letta will continue to be supported.**
+
+## 📦 What's new in this fork (vs upstream)
+
+| Feature | Upstream Dyad | This fork |
 |---|---|---|
-| Gemini CLI (free tier) | ✗ | ✓ Native integration |
-| OpenCode agent | ✗ | ✓ Native integration |
-| Letta (stateful agents) | ✗ | ✓ Native integration |
-| Gemini model selection | Auto only | 8 models including Gemini 3.x |
-| Tool display | Native for API models | Native for CLI models too |
-| Full response completion | API models only | Fixed for all Gemini CLI models |
+| Cloud LLMs via API key (Claude, GPT, Gemini API, …) | ✅ | ✅ |
+| Local inference (Ollama, LM Studio) | ✅ | ✅ |
+| **Gemini CLI** *(free-tier, OAuth)* | ❌ | ✅ |
+| **OpenCode** *(local AI agent)* | ❌ | ✅ |
+| **Letta** *(stateful agents)* | ❌ | ✅ |
+| Native UI for CLI tool calls | — | ✅ |
+| Image attachments through to CLI | — | ✅ |
+| MCP Server Bridge | ❌ | ✅ *(experimental)* |
 
-**Tool display** means file writes, reads, edits, and shell commands from CLI agents render as Dyad's native UI components — collapsible file cards, diffs, command outputs — identical to how built-in API models behave.
+## 🚀 Quick Start
 
----
-
-## Providers
-
-### Gemini CLI
-Uses Google's official [Gemini CLI](https://github.com/google-gemini/gemini-cli). Runs Gemini models locally via your Google account — **free tier available, no API key needed**.
-
-**Available models:**
-- Auto (Gemini 3) — recommended
-- Auto (Gemini 2.5)
-- Gemini 3.1 Pro Preview
-- Gemini 3 Flash Preview
-- Gemini 3.1 Flash Lite Preview
-- Gemini 2.5 Pro
-- Gemini 2.5 Flash
-- Gemini 2.5 Flash Lite
-
-### OpenCode
-Uses [OpenCode](https://opencode.ai) — an open-source AI coding agent. Supports multiple model providers (Anthropic, OpenAI, etc.) with full tool execution.
-
-### Letta
-Uses [Letta](https://docs.letta.com) — stateful agents with persistent memory across sessions (formerly MemGPT). Best for long-running, context-heavy coding tasks.
-
----
-
-## Quick Start
-
-**Requirements:** Node.js 20+, Git
+**Requirements:** Node.js 24+, Git
 
 ```bash
 git clone https://github.com/rayngnpc/dyad-with-cli.git
@@ -57,107 +55,89 @@ cd dyad-with-cli
 npm start
 ```
 
-The setup script handles `npm install`, database setup, and native module rebuilding.
+The setup script installs dependencies, sets up the database, and rebuilds native modules.
 
-### Manual Setup
+<details>
+<summary>Manual setup (if <code>./setup.sh</code> can't run)</summary>
 
 ```bash
-git clone https://github.com/rayngnpc/dyad-with-cli.git
-cd dyad-with-cli
-npm install
+npm install --legacy-peer-deps
 npm rebuild better-sqlite3
 mkdir -p userData
 npm run db:push
 npm start
 ```
+</details>
 
----
+## 🛠 Setting up the CLI providers
 
-## CLI Setup
+Each CLI provider needs to be installed and authenticated separately. After authenticating, restart Dyad — the provider's models will appear under **Local Models**.
 
-Each provider requires its CLI to be installed and authenticated before models appear in Dyad.
-
-### Gemini CLI
+<details>
+<summary><b>Gemini CLI</b></summary>
 
 ```bash
-# Install
 npm install -g @google/gemini-cli
-
-# Authenticate (opens browser for Google OAuth)
-gemini
+gemini   # opens browser for Google OAuth
 ```
+</details>
 
-After first-time auth, restart Dyad — Gemini models will appear under **Local models**.
-
-### OpenCode
+<details>
+<summary><b>OpenCode</b></summary>
 
 ```bash
-# Install
 npm install -g opencode-ai
-
-# Authenticate
 opencode auth login
 ```
+</details>
 
-Restart Dyad after auth.
-
-### Letta
+<details>
+<summary><b>Letta</b></summary>
 
 ```bash
-# Install
-pip install letta
-# or: pipx install letta
-
-# Authenticate (opens browser for Letta Cloud OAuth)
-letta login
+pip install letta   # or: pipx install letta
+letta login         # opens browser for Letta Cloud OAuth
 ```
+</details>
 
-Restart Dyad after auth.
-
----
-
-## Building Installers
+## 📦 Building installers
 
 ```bash
 npm run make
 ```
 
-Outputs:
-- Linux: `out/make/deb/x64/*.deb`, `out/make/rpm/x64/*.rpm`
-- Windows: `out/make/squirrel.windows/x64/*.exe`
-- macOS: `out/make/zip/darwin/x64/*.zip`
+| Platform | Output |
+|---|---|
+| Linux | `out/make/deb/x64/*.deb`, `out/make/rpm/x64/*.rpm` |
+| Windows | `out/make/squirrel.windows/x64/*.exe` |
+| macOS | `out/make/zip/darwin/x64/*.zip` |
 
-> Cross-platform builds require the target OS.
+Cross-platform builds require the target OS.
 
----
+## 🔐 Security notes
 
-## Safety Note
+- CLI providers spawn their respective binaries as subprocesses — Dyad never extracts or handles OAuth tokens. Credentials live where each CLI normally stores them (`~/.gemini/`, `~/.local/share/opencode/`, etc.).
+- The MCP Server Bridge binds to `127.0.0.1` only and uses a cryptographic random auth token. It's opt-in and disabled by default.
+- See [SECURITY.md](./SECURITY.md) for our security policy.
 
-This fork invokes the `gemini` binary as a subprocess — the same as running it in a terminal. It never extracts or handles OAuth tokens. See [Gemini CLI ToS](https://github.com/google-gemini/gemini-cli/blob/main/docs/tos-privacy.md).
+## 🤝 Contributing
 
----
+Issues and pull requests are welcome. Before contributing, please read [CONTRIBUTING.md](./CONTRIBUTING.md). If you're reporting a CLI-provider bug, include the CLI version (`gemini --version`, `opencode --version`, `letta --version`) and your OS.
 
-## Original Dyad Features
+For the upstream Dyad project itself, see [dyad-sh/dyad](https://github.com/dyad-sh/dyad).
 
-Everything from the original Dyad is preserved:
+## 📜 License
 
-- Local, private, no lock-in
-- Bring your own API keys (Claude, GPT, Gemini API, OpenRouter)
-- Ollama and LM Studio support
-- Git versioning for every change
-- Supabase integration
-- Cross-platform (Mac, Windows, Linux)
+- Code outside `src/pro`: **Apache 2.0**
+- Code inside `src/pro`: **Functional Source License 1.1** (inherited from upstream)
 
----
+See [LICENSE](./LICENSE) for full text.
 
-## Community
+## 🙏 Credits
 
-- Issues: [github.com/rayngnpc/dyad-with-cli/issues](https://github.com/rayngnpc/dyad-with-cli/issues)
-- Original Dyad community: [r/dyadbuilders](https://www.reddit.com/r/dyadbuilders/)
+Built on **[Dyad](https://github.com/dyad-sh/dyad)** by the Dyad team. This fork would not exist without their work — please support the upstream project.
 
-## License
-
-- Code outside `src/pro`: Apache 2.0
-- Code inside `src/pro`: Functional Source License 1.1
-
-See [LICENSE](./LICENSE) for details.
+The CLI integrations build on:
+- [Gemini CLI](https://github.com/google-gemini/gemini-cli) by Google
+- [OpenCode](https://opencode.ai)
+- [Letta](https://docs.letta.com) (formerly MemGPT)
